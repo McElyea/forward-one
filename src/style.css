@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;600;700&display=swap');
+
+:root {
+  color: #f5f1df;
+  background: #071f26;
+  font-family: Inter, system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  min-width: 320px;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background:
+    radial-gradient(circle at 25% 10%, rgba(29, 102, 105, 0.45), transparent 32rem),
+    #071f26;
+}
+
+#app {
+  display: grid;
+  place-items: center;
+}
+
+#app canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.42);
+}
