@@ -229,6 +229,13 @@ export interface RiverLayout {
   height: number
   type: Typography
   gutter: number
+  /**
+   * True on a short landscape screen (a phone held sideways), where reserving
+   * bands for the lane and the paddle buttons left the river only ~42% of the
+   * screen. When set, both float over the river instead, and the scene draws
+   * them translucent so the water still reads underneath.
+   */
+  controlsOverlay: boolean
   topBar: Rect
   river: Rect
   rail: Rect
@@ -249,6 +256,77 @@ export function riverLayout(width: number, height: number): RiverLayout {
   const mode = layoutMode(width, height)
   const type = typography(width, height)
   const g = gutter(width, height)
+  const controlGap = round(clamp(g * 0.5, 8, 16))
+
+  // A phone held sideways has so little height that stacking everything leaves
+  // the world a letterbox slit. Float the controls instead.
+  const controlsOverlay = mode === 'landscape' && height < 520
+
+  if (controlsOverlay) {
+    const topBarHeight = round(clamp(height * 0.1, type.heading * 2, 54))
+    const railThickness = round(clamp(width * 0.11, 84, 150))
+    const river: Rect = {
+      x: 0,
+      y: topBarHeight,
+      width: round(width - railThickness),
+      height: round(height - topBarHeight),
+    }
+    const laneHeight = round(clamp(height * 0.15, type.body * 3.2, 76))
+    const controlHeight = round(clamp(height * 0.22, MIN_TOUCH_PX + 12, 110))
+    const controlWidth = round(clamp(width * 0.15, MIN_TOUCH_PX + 24, 150))
+    const bottom = height - g * 0.55
+    const edge = round(g * 0.4)
+
+    const rhythmLane: Rect = {
+      x: round(river.x + controlWidth + controlGap + edge),
+      y: round(bottom - laneHeight),
+      width: round(river.width - (controlWidth + controlGap + edge) * 2),
+      height: laneHeight,
+    }
+
+    return {
+      mode,
+      width,
+      height,
+      type,
+      gutter: g,
+      controlsOverlay,
+      topBar: { x: 0, y: 0, width: round(width), height: topBarHeight },
+      river,
+      rail: {
+        x: round(width - railThickness),
+        y: topBarHeight,
+        width: railThickness,
+        height: round(height - topBarHeight),
+      },
+      railAxis: 'vertical',
+      rhythmLane,
+      targetX: round(rhythmLane.x + rhythmLane.width * 0.28),
+      controls: {
+        forward: {
+          x: round(river.x + edge),
+          y: round(bottom - controlHeight),
+          width: controlWidth,
+          height: controlHeight,
+        },
+        backward: {
+          x: round(river.x + river.width - controlWidth - edge),
+          y: round(bottom - controlHeight),
+          width: controlWidth,
+          height: controlHeight,
+        },
+      },
+      call: { x: round(river.x + river.width / 2), y: round(river.y + river.height * 0.15) },
+      callSub: {
+        x: round(river.x + river.width / 2),
+        y: round(river.y + river.height * 0.15 + type.hero * 0.78),
+      },
+      feedback: { x: round(river.x + river.width / 2), y: round(river.y + river.height * 0.56) },
+      raft: { x: round(river.x + river.width / 2), y: round(river.y + river.height * 0.42) },
+      timeText: { x: round(g), y: round(topBarHeight * 0.5) },
+      statsText: { x: round(width - g), y: round(topBarHeight * 0.5) },
+    }
+  }
 
   const topBarHeight = round(clamp(height * 0.1, type.heading * 2.4, 84))
 
@@ -258,7 +336,6 @@ export function riverLayout(width: number, height: number): RiverLayout {
   )
   const laneHeight = round(clamp(height * 0.15, type.body * 4, 96))
 
-  const controlGap = round(clamp(g * 0.5, 8, 16))
   const controlsTop = height - g * 0.6 - controlHeight
   const laneTop = controlsTop - controlGap - laneHeight
 
@@ -314,6 +391,7 @@ export function riverLayout(width: number, height: number): RiverLayout {
     height,
     type,
     gutter: g,
+    controlsOverlay,
     topBar: { x: 0, y: 0, width: round(width), height: topBarHeight },
     river,
     rail,

@@ -160,16 +160,60 @@ describe('riverLayout', () => {
     expect(controls.backward.x).toBeGreaterThan(controls.forward.x)
   })
 
-  it.each(VIEWPORTS)('stacks the play area without overlaps on $name', ({ width, height }) => {
+  it.each(VIEWPORTS)('never puts anything under the top bar on $name', ({ width, height }) => {
     const layout = riverLayout(width, height)
 
     expect(layout.topBar.y + layout.topBar.height).toBeLessThanOrEqual(layout.river.y)
-    expect(layout.river.y + layout.river.height).toBeLessThanOrEqual(layout.rhythmLane.y)
-    expect(layout.rhythmLane.y + layout.rhythmLane.height).toBeLessThanOrEqual(
-      layout.controls.forward.y,
-    )
-    expect(layout.controls.forward.y + layout.controls.forward.height).toBeLessThanOrEqual(height)
     expect(layout.river.height).toBeGreaterThan(0)
+    expect(layout.controls.forward.y + layout.controls.forward.height).toBeLessThanOrEqual(height)
+  })
+
+  it.each(VIEWPORTS.filter((v) => !riverLayout(v.width, v.height).controlsOverlay))(
+    'stacks river, lane and controls without overlapping on $name',
+    ({ width, height }) => {
+      const layout = riverLayout(width, height)
+
+      expect(layout.river.y + layout.river.height).toBeLessThanOrEqual(layout.rhythmLane.y)
+      expect(layout.rhythmLane.y + layout.rhythmLane.height).toBeLessThanOrEqual(
+        layout.controls.forward.y,
+      )
+    },
+  )
+
+  it.each(VIEWPORTS.filter((v) => riverLayout(v.width, v.height).controlsOverlay))(
+    'floats the lane and controls over the river without colliding on $name',
+    ({ width, height }) => {
+      const layout = riverLayout(width, height)
+      const { river, rhythmLane, controls } = layout
+
+      // Both sit inside the river, which now runs the full height beneath the
+      // top bar rather than being squeezed between reserved bands.
+      for (const rect of [rhythmLane, controls.forward, controls.backward]) {
+        expect(rect.x).toBeGreaterThanOrEqual(river.x)
+        expect(rect.x + rect.width).toBeLessThanOrEqual(river.x + river.width + 1)
+        expect(rect.y).toBeGreaterThanOrEqual(river.y)
+        expect(rect.y + rect.height).toBeLessThanOrEqual(river.y + river.height + 1)
+      }
+      // The lane threads between the two paddle zones; nothing overlaps.
+      expect(rhythmLane.x).toBeGreaterThanOrEqual(controls.forward.x + controls.forward.width)
+      expect(rhythmLane.x + rhythmLane.width).toBeLessThanOrEqual(controls.backward.x)
+      expect(rhythmLane.width).toBeGreaterThan(0)
+    },
+  )
+
+  it('gives the world most of a landscape phone screen', () => {
+    const layout = riverLayout(852, 393)
+    const share = (layout.river.width * layout.river.height) / (852 * 393)
+
+    expect(layout.controlsOverlay).toBe(true)
+    // Reserving bands for the lane and controls left the river 42% of the
+    // screen, which read as a letterbox slit on a real phone.
+    expect(share).toBeGreaterThan(0.75)
+  })
+
+  it('keeps the stacked layout on a desktop, where there is height to spare', () => {
+    expect(riverLayout(1440, 900).controlsOverlay).toBe(false)
+    expect(riverLayout(393, 852).controlsOverlay).toBe(false)
   })
 
   it.each(VIEWPORTS)('keeps every river element on screen on $name', ({ width, height }) => {

@@ -286,8 +286,9 @@ export class RiverScene extends Phaser.Scene {
         .setFontSize(Math.round(layout.type.label * 0.9))
         .setOrigin(0, 1)
         .setPosition(layout.gutter * 0.5, layout.rhythmLane.y - 4)
-        // Keyboard hint is meaningless on a phone, where the buttons are the input.
-        .setVisible(layout.mode === 'landscape')
+        // Meaningless on a phone, where the buttons are the input — and with the
+        // controls floating it would land inside the forward button.
+        .setVisible(layout.mode === 'landscape' && !layout.controlsOverlay)
     })
 
     this.createPaddleButton('forward', 'FORWARD', 'SPACE  /  F')
@@ -305,24 +306,33 @@ export class RiverScene extends Phaser.Scene {
     const title = this.add.text(0, 0, label, headingStyle(this.layout.type.heading, '#071f26')).setDepth(22)
     const keys = this.add.text(0, 0, keyLabel, headingStyle(this.layout.type.label, '#16424a')).setDepth(22)
 
+    let restingAlpha = 1
+
     this.onLayout((layout) => {
       const rect = direction === 'forward' ? layout.controls.forward : layout.controls.backward
-      button.setPosition(rect.x, rect.y).setSize(rect.width, rect.height)
+      const overlay = layout.controlsOverlay
+      restingAlpha = overlay ? 0.82 : 1
+      button.setPosition(rect.x, rect.y).setSize(rect.width, rect.height).setAlpha(restingAlpha)
       button.setInteractive({ useHandCursor: true })
+      // Floating over the river the buttons are narrow thumb zones, so the
+      // caption centres instead of sitting against the left edge.
       title
-        .setFontSize(layout.type.heading)
-        .setOrigin(0, 0.5)
-        .setPosition(rect.x + rect.width * 0.07, rect.y + rect.height / 2)
+        .setFontSize(overlay ? Math.round(layout.type.body) : layout.type.heading)
+        .setOrigin(overlay ? 0.5 : 0, 0.5)
+        .setPosition(
+          overlay ? rect.x + rect.width / 2 : rect.x + rect.width * 0.07,
+          rect.y + rect.height / 2,
+        )
       keys
         .setFontSize(Math.round(layout.type.label * 0.9))
         .setOrigin(1, 0.5)
         .setPosition(rect.x + rect.width - rect.width * 0.07, rect.y + rect.height / 2)
-        .setVisible(layout.mode === 'landscape')
+        .setVisible(layout.mode === 'landscape' && !overlay)
     })
 
     button.on('pointerdown', () => this.onPaddle(direction))
-    button.on('pointerover', () => button.setAlpha(0.84))
-    button.on('pointerout', () => button.setAlpha(1))
+    button.on('pointerover', () => button.setAlpha(restingAlpha * 0.84))
+    button.on('pointerout', () => button.setAlpha(restingAlpha))
   }
 
   private drawRiver(elapsed: number): void {
@@ -429,7 +439,9 @@ export class RiverScene extends Phaser.Scene {
     const { rhythmLane: lane, targetX } = this.layout
     graphics.clear()
     graphics.setDepth(15)
-    graphics.fillStyle(COLORS.ink, 0.91)
+    // Floating over the water, the panel has to stay see-through enough that
+    // the river still reads underneath it.
+    graphics.fillStyle(COLORS.ink, this.layout.controlsOverlay ? 0.74 : 0.91)
     graphics.fillRoundedRect(lane.x, lane.y, lane.width, lane.height, 14)
     graphics.lineStyle(2, 0x31545a, 1)
     graphics.strokeRoundedRect(lane.x, lane.y, lane.width, lane.height, 14)
@@ -492,11 +504,34 @@ export class RiverScene extends Phaser.Scene {
     }
 
     const sorted = [...this.racers].sort((a, b) => b.progress - a.progress)
-    for (const racer of sorted) {
+    const placed = sorted.map((racer) => {
       const along = axisFrom + (axisTo - axisFrom) * racer.progress
-      const x = vertical ? cross : along
-      const y = vertical ? along : cross
-      const radius = racer.isLocal ? 11 : 8
+      return {
+        racer,
+        radius: racer.isLocal ? 11 : 8,
+        size: Math.round(type.label * (racer.isLocal ? 0.95 : 0.85)),
+        dot: along,
+        label: along,
+      }
+    })
+
+    // Every racer starts at progress 0, so without this every name lands on the
+    // same pixel and the rail reads as one smudge for the first few seconds.
+    // Dots stay truthful; only the labels are nudged apart.
+    const minGap = type.label * (vertical ? 1.15 : 3.2)
+    for (let i = 1; i < placed.length; i += 1) {
+      const previous = placed[i - 1].label
+      const current = placed[i]
+      // Sorted by progress descending, so `along` runs one way down the axis:
+      // downward in y when vertical, leftward in x when horizontal.
+      current.label = vertical
+        ? Math.max(current.label, previous + minGap)
+        : Math.min(current.label, previous - minGap)
+    }
+
+    for (const { racer, radius, size, dot, label: labelAlong } of placed) {
+      const x = vertical ? cross : dot
+      const y = vertical ? dot : cross
 
       graphics.fillStyle(racer.color, 1)
       graphics.fillCircle(x, y, radius)
@@ -504,18 +539,18 @@ export class RiverScene extends Phaser.Scene {
       graphics.strokeCircle(x, y, radius)
 
       const name = `racer-${racer.id}`
-      const size = Math.round(type.label * (racer.isLocal ? 0.95 : 0.85))
       const color = `#${racer.color.toString(16).padStart(6, '0')}`
-      const label = this.children.getByName(name) as Phaser.GameObjects.Text | null
-      if (label) {
-        label.setFontSize(size).setPosition(
-          vertical ? x + radius + 6 : x,
-          vertical ? y : y - radius - size * 1.1,
-        )
-        label.setOrigin(vertical ? 0 : 0.5, vertical ? 0.5 : 0)
+      const labelX = vertical ? cross + radius + 6 : labelAlong
+      const labelY = vertical ? labelAlong : cross - radius - size * 1.1
+      const existing = this.children.getByName(name) as Phaser.GameObjects.Text | null
+      if (existing) {
+        existing
+          .setFontSize(size)
+          .setOrigin(vertical ? 0 : 0.5, vertical ? 0.5 : 0)
+          .setPosition(labelX, labelY)
       } else {
         this.add
-          .text(x, y, racer.name, headingStyle(size, color))
+          .text(labelX, labelY, racer.name, headingStyle(size, color))
           .setName(name)
           .setDepth(13)
           .setOrigin(vertical ? 0 : 0.5, vertical ? 0.5 : 0)
