@@ -1,12 +1,14 @@
 # Forward One
 
+[![CI](https://github.com/McElyea/forward-one/actions/workflows/ci.yml/badge.svg)](https://github.com/McElyea/forward-one/actions/workflows/ci.yml)
+
 A browser-first whitewater rhythm racer built with Phaser 4, TypeScript, and Vite.
 
 The scaffold includes a playable timing loop, data definitions for Class II–V levels, solo mode, and a multiplayer preview with simulated racers. The simulation implements the same `RaceAdapter` interface a future Supabase realtime room will use.
 
-## Run on macOS
+## Run it locally
 
-Install [Node.js](https://nodejs.org/) 22 or newer, then:
+Install [Node.js](https://nodejs.org/) 22 or newer — the version `package.json` declares in `engines` and the one CI builds against — then:
 
 ```bash
 npm install
@@ -21,9 +23,12 @@ Open the local URL printed by Vite. Use Space, F, or ↑ for forward strokes and
 npm run dev       # local development server
 npm run build     # type-check and create dist/
 npm run test      # run unit tests once
+npm run test:watch # re-run unit tests as files change
 npm run preview   # serve the production build locally
 npm run voice:generate # regenerate all bundled Forward and Backwards calls
 ```
+
+Every push to `main` and every pull request runs `npm ci`, `npm run build`, and `npm run test` on Node 22 — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and the badge above.
 
 The `dist/` directory is a static site and can be deployed to Cloudflare Pages, Vercel, Netlify, GitHub Pages, or itch.io.
 
