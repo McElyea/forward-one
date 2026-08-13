@@ -24,19 +24,23 @@ body,
 }
 
 body {
+  /* The canvas is the whole surface now, so browser touch gestures have to stay
+     out of the way: no pull-to-refresh, no double-tap zoom, no tap flash. */
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
   background:
     radial-gradient(circle at 25% 10%, rgba(29, 102, 105, 0.45), transparent 32rem),
     #071f26;
 }
 
-#app {
-  display: grid;
-  place-items: center;
-}
-
 #app canvas {
   display: block;
-  max-width: 100%;
-  max-height: 100%;
-  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.42);
+  /* Phaser.Scale.RESIZE sizes the backing store; this keeps the element itself
+     flush to the viewport so there is no letterbox to centre inside. */
+  width: 100%;
+  height: 100%;
 }
