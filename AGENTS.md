@@ -20,9 +20,9 @@ npm run voice:generate # regenerate the bundled guide calls (dev-only, see below
 ```
 
 **`npm run build` and `npm run test` are the correctness gate.** Run both before pushing.
-A CI workflow that runs them on every pull request is proposed in
-[#4](https://github.com/McElyea/forward-one/issues/4); until it lands, nothing runs them
-for you and a green local result is the only evidence a change works.
+`.github/workflows/ci.yml` runs the same two commands on every pull request and on every
+push to `main`, so the hosted `CI / build` check is the authoritative signal — but it tells
+you nothing you could not have learned locally in a few seconds first.
 
 Note that `npm run build` *is* the type-check — `tsconfig.json` sets `"noEmit": true`, so
 `tsc` validates and `vite build` produces `dist/`. `npx tsc` on its own is the fast
@@ -100,13 +100,15 @@ Nothing will reformat your code or catch style drift. What `tsconfig.json` does 
 
 - `verbatimModuleSyntax` (`:13`) — importing a type as a value is a **build error**. Use
   `import type { … }` for anything from `src/game/types.ts`.
-- `noUnusedLocals` and `noUnusedParameters` (`:18-19`) — an unused import or parameter
+- `noUnusedLocals` and `noUnusedParameters` (`:19-20`) — an unused import or parameter
   **fails the build**, it is not a warning. Prefix a deliberately-unused parameter with `_`,
   as `SoloRaceAdapter.update()` does.
 - `erasableSyntaxOnly`, `noFallthroughCasesInSwitch`.
+- `strict` (`:18`) — `strictNullChecks`, `noImplicitAny` and the rest are on. Fix a strict
+  error by narrowing, not with `!`, `as any`, or `@ts-expect-error`.
 
-`"strict"` is **not** currently set; enabling it is proposed in
-[#3](https://github.com/McElyea/forward-one/issues/3).
+`noUncheckedIndexedAccess` is **not** set. It currently reports 14 errors, several of them
+real — including the array access behind [#1](https://github.com/McElyea/forward-one/issues/1).
 
 ## Do not touch
 
