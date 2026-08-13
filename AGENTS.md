@@ -45,10 +45,27 @@ change is in the wrong place.
 **Colours and text styles come from `src/game/ui/theme.ts`** — `COLORS`, `headingStyle()`,
 `bodyStyle()` — not from inline literals.
 
-**Scene coordinates are absolute against a 1280×720 design canvas.**
-`src/game/startGame.ts:9-10` fixes the canvas at that size and `:14` scales it with
-`Phaser.Scale.FIT`. Position new elements in that coordinate space. Never read
-`window.innerWidth` / `window.innerHeight` — the canvas is not the viewport.
+**Nothing is positioned with a literal coordinate. Ask `ui/layout.ts` instead.**
+The canvas is sized to the viewport (`Phaser.Scale.RESIZE`, `src/game/startGame.ts:16`), so
+**one game unit is one CSS pixel** — a 44-unit button really is 44px under the player's
+thumb. `src/game/ui/layout.ts` turns `(width, height)` into named regions (`river`, `rail`,
+`rhythmLane`, `controls`, …) and a type scale, with separate portrait and landscape
+profiles. It is pure arithmetic and imports nothing, so its behaviour is pinned by
+`layout.test.ts` against a matrix of real device viewports.
+
+Two rules follow:
+
+- **Add to the layout, don't inline a number.** A new element needs a rect or point in
+  `layout.ts` and a test asserting it stays on screen and, if it is interactive, that it
+  clears `MIN_TOUCH_PX`. Decorative work inside a region should be expressed as fractions
+  of that region — see the normalised bank outlines at the top of `RiverScene.ts`.
+- **Handle re-layout, because rotating a phone fires it mid-run.** `MenuScene` holds no run
+  state, so it restarts on resize, carrying the chosen level through `init(data)`.
+  `RiverScene` cannot restart without throwing the run away, so every object registers a
+  placement closure via its `onLayout()` helper; a resize re-runs them all. That array is
+  reset in `init()` like any other scene state.
+
+Never read `window.innerWidth` / `window.innerHeight` — take the size from `this.scale`.
 
 ## Phaser lifecycle: the trap
 
@@ -101,7 +118,10 @@ Nothing will reformat your code or catch style drift. What `tsconfig.json` does 
 - `noUnusedLocals` and `noUnusedParameters` (`:19-20`) — an unused import or parameter
   **fails the build**, it is not a warning. Prefix a deliberately-unused parameter with `_`,
   as `SoloRaceAdapter.update()` does.
-- `erasableSyntaxOnly`, `noFallthroughCasesInSwitch`.
+- `erasableSyntaxOnly` (`:21`) — rejects any TypeScript syntax that emits runtime code. In
+  practice that means **constructor parameter properties**: `constructor(private readonly
+  levels: …)` fails to compile. Declare the field and assign it in the body instead.
+- `noFallthroughCasesInSwitch`.
 - `strict` (`:18`) — `strictNullChecks`, `noImplicitAny` and the rest are on. Fix a strict
   error by narrowing, not with `!`, `as any`, or `@ts-expect-error`.
 

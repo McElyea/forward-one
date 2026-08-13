@@ -13,7 +13,7 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite. Use Space, F, or ↑ for forward strokes and B or ↓ for backwards strokes; touch devices have a large button for each direction. Each guide call is entirely forward or entirely backwards. Press the requested direction when a paddle marker reaches the yellow timing line. Escape returns to the menu. The put-in screen offers four bundled Kokoro guide voices—Bella, Heart, Liam, and Eric—with Bella as the default. Selecting a voice previews and remembers it on that device.
+Open the local URL printed by Vite. Use Space, F, or ↑ for forward strokes and B or ↓ for backwards strokes; touch devices have a large button for each direction. The layout adapts to the viewport in both orientations, so it plays on a phone as well as a desktop. Each guide call is entirely forward or entirely backwards. Press the requested direction when a paddle marker reaches the yellow timing line. Escape returns to the menu. The put-in screen offers four bundled Kokoro guide voices—Bella, Heart, Liam, and Eric—with Bella as the default. Selecting a voice previews and remembers it on that device.
 
 ## Commands
 
@@ -39,6 +39,7 @@ src/game/
   race/SimulatedRaceAdapter.ts
   scenes/MenuScene.ts
   scenes/RiverScene.ts
+  ui/layout.ts              viewport-driven regions and type scale
 ```
 
 ## Contributing
