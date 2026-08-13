@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
 
+# The job only reads the tree and runs npm; it never writes to the repo,
+# comments, or publishes. Declaring that explicitly keeps the token from
+# inheriting a wider default.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
