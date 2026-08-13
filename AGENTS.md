@@ -7,16 +7,15 @@ compiles, and the ones where the obvious first attempt is wrong.
 Everything below was verified against the source it cites. When a claim and the code
 disagree, the code is right and this file is a bug.
 
-## Commands
+## The gate
+
+`README.md` lists every script; this section is only about which of them decide whether a
+change is allowed to land.
 
 ```bash
-npm install            # first time
-npm run dev            # Vite dev server
-npm run build          # tsc && vite build — the type-check and the bundle
-npm run test           # vitest run — the full suite, once
-npm run test:watch     # vitest in watch mode
-npm run preview        # serve the production build
-npm run voice:generate # regenerate the bundled guide calls (dev-only, see below)
+npx tsc          # type-check alone — the fast inner-loop check
+npm run build    # tsc && vite build
+npm run test     # vitest run
 ```
 
 **`npm run build` and `npm run test` are the correctness gate.** Run both before pushing.
@@ -24,9 +23,8 @@ npm run voice:generate # regenerate the bundled guide calls (dev-only, see below
 push to `main`, so the hosted `CI / build` check is the authoritative signal — but it tells
 you nothing you could not have learned locally in a few seconds first.
 
-Note that `npm run build` *is* the type-check — `tsconfig.json` sets `"noEmit": true`, so
-`tsc` validates and `vite build` produces `dist/`. `npx tsc` on its own is the fast
-inner-loop check.
+`npm run build` *is* the type-check: `tsconfig.json` sets `"noEmit": true` (`:15`), so `tsc`
+validates and `vite build` is what actually produces `dist/`.
 
 ## Architecture invariants
 
