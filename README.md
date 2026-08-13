@@ -41,6 +41,10 @@ src/game/
   scenes/RiverScene.ts
 ```
 
+## Contributing
+
+[AGENTS.md](AGENTS.md) collects the constraints that are not obvious from reading the source: the Phaser scene-reuse rule, why the test suite runs without a DOM, which compiler flags fail the build, and which files are generated and must not be hand-edited. Worth reading before a first change, by people and coding agents alike.
+
 ## Multiplayer path
 
 The first hosted multiplayer implementation should add a `SupabaseRaceAdapter` without changing `RiverScene`. It will use Presence for lobby membership and Broadcast for the shared start time, progress snapshots, and finish events. Client input-event records can later support server validation and ghost races.
