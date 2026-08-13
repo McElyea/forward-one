@@ -11,6 +11,7 @@ import { SimulatedRaceAdapter } from '../race/SimulatedRaceAdapter'
 import { SoloRaceAdapter } from '../race/SoloRaceAdapter'
 import type { RaceAdapter } from '../race/RaceAdapter'
 import { RhythmEngine } from '../rhythm/RhythmEngine'
+import { runOutcome, type RunOutcome } from '../run/runOutcome'
 import type {
   LevelConfig,
   PaddleDirection,
@@ -167,8 +168,9 @@ export class RiverScene extends Phaser.Scene {
     this.updateRaft(activeElapsed)
     this.updateHud(activeElapsed, elapsed < 0)
 
-    if (this.progress >= 1) {
-      this.finishRace(activeElapsed)
+    const outcome = runOutcome(this.progress, activeElapsed, this.level.durationMs)
+    if (outcome !== 'running') {
+      this.finishRace(activeElapsed, outcome)
     }
   }
 
@@ -691,16 +693,23 @@ export class RiverScene extends Phaser.Scene {
     guideCall.play()
   }
 
-  private finishRace(elapsed: number): void {
+  private finishRace(elapsed: number, outcome: Exclude<RunOutcome, 'running'>): void {
     this.completed = true
     this.activeGuideCall?.stop()
     const sorted = [...this.racers].sort((a, b) => b.progress - a.progress)
     const place = Math.max(1, sorted.findIndex((racer) => racer.isLocal) + 1)
     const placeLabel = ['FIRST', 'SECOND', 'THIRD', 'FOURTH'][place - 1] ?? `${place}TH`
+    const reachedTakeOut = outcome === 'finished'
+    const headingLabel = reachedTakeOut
+      ? (this.mode === 'solo' ? 'TAKE OUT' : `${placeLabel} PLACE`)
+      : 'MISSED THE TAKE-OUT'
+    const blurbLabel = reachedTakeOut
+      ? `${this.level.name} complete. Clean lines beat raw speed.`
+      : `${this.level.name} ran out of river at ${Math.round(this.progress * 100)}%. Land more calls on the beat to make the eddy.`
 
     const scrim = this.add.rectangle(0, 0, 10, 10, COLORS.ink, 0.82).setOrigin(0).setDepth(50)
     const heading = this.add
-      .text(0, 0, this.mode === 'solo' ? 'TAKE OUT' : `${placeLabel} PLACE`, headingStyle(this.layout.type.hero, this.level.accent))
+      .text(0, 0, headingLabel, headingStyle(this.layout.type.hero, reachedTakeOut ? this.level.accent : '#ff9f5a'))
       .setOrigin(0.5)
       .setDepth(51)
     const summary = this.add
@@ -709,7 +718,7 @@ export class RiverScene extends Phaser.Scene {
       .setDepth(51)
       .setLetterSpacing(1.4)
     const blurb = this.add
-      .text(0, 0, `${this.level.name} complete. Clean lines beat raw speed.`, bodyStyle(this.layout.type.body, '#9bb9b4'))
+      .text(0, 0, blurbLabel, bodyStyle(this.layout.type.body, '#9bb9b4'))
       .setOrigin(0.5)
       .setDepth(51)
       .setWordWrapWidth(this.layout.width * 0.8)

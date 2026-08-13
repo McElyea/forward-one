@@ -45,6 +45,19 @@ describe('LEVELS', () => {
     }
   })
 
+  it('lands every authored stroke before the run times out', () => {
+    // A run now ends at durationMs whatever the player scored, so a cue whose
+    // last stroke fell after that would be authored content nobody can paddle.
+    for (const level of LEVELS) {
+      for (const cue of level.cues) {
+        const interval = cue.interval ?? 560
+        const lastStrokeAt = cue.at + (cue.strokes - 1) * interval
+
+        expect(lastStrokeAt).toBeLessThan(level.durationMs)
+      }
+    }
+  })
+
   it('gives every level a six-digit hex accent', () => {
     for (const level of LEVELS) {
       expect(level.accent).toMatch(/^#[0-9a-f]{6}$/)
