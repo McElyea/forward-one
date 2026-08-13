@@ -37,6 +37,7 @@ src/game/
   rhythm/RhythmEngine.ts    framework-independent timing judgments
   race/RaceAdapter.ts       solo/multiplayer boundary
   race/SimulatedRaceAdapter.ts
+  run/runOutcome.ts         whether a run has finished, timed out, or is still going
   scenes/MenuScene.ts
   scenes/RiverScene.ts
   ui/layout.ts              viewport-driven regions and type scale
