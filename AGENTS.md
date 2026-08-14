@@ -26,6 +26,14 @@ you nothing you could not have learned locally in a few seconds first.
 `npm run build` *is* the type-check: `tsconfig.json` sets `"noEmit": true` (`:15`), so `tsc`
 validates and `vite build` is what actually produces `dist/`.
 
+`Dockerfile` runs that same `npm run build` on `node:22-alpine` and serves the resulting
+`dist/` with nginx, so a tree that fails the gate cannot produce an image either. Two things
+about it are easy to get wrong: the Node major in its `FROM` line has to match
+`engines.node`, which `src/docs.test.ts` now fails on rather than leaving to review; and the
+build stage runs `npm ci`, not `npm ci --omit=dev`, because `tsc` and `vite` are
+devDependencies — dropping them to slim the *build* stage breaks it, and the stage is
+discarded anyway.
+
 ## Architecture invariants
 
 **Scenes stay presentation-only; testable logic lives in plain modules.**
