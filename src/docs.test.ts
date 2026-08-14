@@ -59,8 +59,10 @@ const documentedPaths = structureLines
   // those, so anything else listed there is left for a human to check.
   .filter((path) => path.endsWith('.ts'))
 
+// Globbed from `src` rather than from `src/game` so that retitling the tree's
+// root line cannot quietly turn every path in it into a false report.
 const sourceFiles = new Set(
-  Object.keys(import.meta.glob('./game/**/*.ts')).map((path) => path.replace('./', 'src/')),
+  Object.keys(import.meta.glob('./**/*.ts')).map((path) => path.replace('./', 'src/')),
 )
 
 describe('the README stays in step with the project it documents', () => {
