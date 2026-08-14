@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import ciWorkflow from '../.github/workflows/ci.yml?raw'
+import dockerfile from '../Dockerfile?raw'
 import manifestSource from '../package.json?raw'
 import readme from '../README.md?raw'
 
@@ -107,5 +108,24 @@ describe('the README stays in step with the project it documents', () => {
       missing,
       `README "Project structure" paths that no longer exist: ${missing.join(', ')}`,
     ).toEqual([])
+  })
+})
+
+/**
+ * The Dockerfile is a fourth description of the same project, and the one least
+ * likely to be re-read: it runs `npm run build` on a Node it names itself, so a
+ * bump to `engines.node` that misses it produces an image built on a Node the
+ * project no longer claims to support — and the failure, if any, surfaces at
+ * deploy time rather than here.
+ */
+describe('the container image stays in step with the project it builds', () => {
+  it('builds on the Node major that engines declares', () => {
+    const declared = soleMatch('package.json engines.node', /^>=(\d+)/, manifest.engines.node)
+    const image = soleMatch('the Dockerfile build stage', /^FROM node:(\d+)/m, dockerfile)
+
+    expect(
+      image,
+      `the Dockerfile builds on Node ${image} but package.json declares engines.node ">=${declared}"`,
+    ).toBe(declared)
   })
 })

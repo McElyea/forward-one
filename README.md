@@ -32,6 +32,19 @@ Every push to `main` and every pull request runs `npm ci`, `npm run build`, and 
 
 The `dist/` directory is a static site and can be deployed to Cloudflare Pages, Vercel, Netlify, GitHub Pages, or itch.io.
 
+## Run it in a container
+
+[`Dockerfile`](Dockerfile) builds the same `dist/` on Node 22 and then serves it with nginx, for hosts that take a container rather than a folder of files. Node, npm, and `node_modules` stay in the discarded build stage; the image that ships is nginx, the bundle, and the guide audio.
+
+```bash
+docker build -t forward-one .
+docker run --rm -p 8080:8080 forward-one
+```
+
+Then open <http://localhost:8080>.
+
+The server listens on **8080** as an unprivileged user, so it needs no root and no added capability. It answers `GET /healthz` with a fixed `200` for container healthchecks, fingerprinted `/assets` are served `immutable` while `index.html` is `no-cache`, and TLS and security headers are left to whatever reverse proxy sits in front — [`docker/nginx.conf`](docker/nginx.conf) says why for each. The game keeps no server-side state, so the container needs no volume, no database, and no environment.
+
 Kokoro is a development-only dependency. Its 82M-parameter model is used only by `npm run voice:generate`; players receive small WAV clips and never download the model.
 
 ## Project structure

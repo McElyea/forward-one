@@ -1,0 +1,24 @@
+# Keep the build context small and the image reproducible. node_modules is
+# rebuilt from package-lock.json inside the image, and shipping a host copy
+# would overwrite it with binaries built for the wrong platform; dist/ is the
+# build's output, not its input.
+node_modules
+dist
+dist-ssr
+
+.git
+.github
+.gitignore
+.dockerignore
+
+# Local overrides never belong in an image. .env.example stays — it is
+# documentation, and nothing reads it at build time.
+.env
+*.local
+
+*.log
+logs
+
+.vscode
+.idea
+.DS_Store
