@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import agentsGuide from '../AGENTS.md?raw'
 import ciWorkflow from '../.github/workflows/ci.yml?raw'
 import dockerfile from '../Dockerfile?raw'
 import manifestSource from '../package.json?raw'
@@ -61,10 +62,16 @@ const documentedPaths = structureLines
   .filter((path) => path.endsWith('.ts'))
 
 // Globbed from `src` rather than from `src/game` so that retitling the tree's
-// root line cannot quietly turn every path in it into a false report.
-const sourceFiles = new Set(
-  Object.keys(import.meta.glob('./**/*.ts')).map((path) => path.replace('./', 'src/')),
+// root line cannot quietly turn every path in it into a false report. Eager and
+// raw, because the AGENTS.md citations below are checked against the text of the
+// line they name, not only against the path.
+const sourceText: Record<string, string> = Object.fromEntries(
+  Object.entries(
+    import.meta.glob<string>('./**/*.ts', { query: '?raw', import: 'default', eager: true }),
+  ).map(([path, text]) => [path.replace('./', 'src/'), text]),
 )
+
+const sourceFiles = new Set(Object.keys(sourceText))
 
 describe('the README stays in step with the project it documents', () => {
   it('documents every npm script', () => {
@@ -127,5 +134,98 @@ describe('the container image stays in step with the project it builds', () => {
       image,
       `the Dockerfile builds on Node ${image} but package.json declares engines.node ">=${declared}"`,
     ).toBe(declared)
+  })
+})
+
+/**
+ * `AGENTS.md` points at the source it describes as `path:line`, and its opening
+ * paragraph promises that every claim in it was verified against what it cites.
+ * Line numbers are the half of that promise that rots without anyone touching the
+ * file: a field added to a scene moves every declaration below it, and nothing
+ * re-reads the guide. Two of its citations had gone stale before this was written.
+ *
+ * What is checkable here is narrower than "the claim is true": the file has to
+ * exist, the lines have to be in range, and one of the identifiers the citing
+ * sentence names in backticks has to appear on one of them. A citation that slides
+ * onto a different line still mentioning the same symbol passes, so this replaces
+ * none of the reading — it only stops the drift that nobody would notice.
+ */
+
+/** The files `AGENTS.md` cites, keyed the way it writes their paths. */
+const citableText: Record<string, string> = {
+  ...sourceText,
+  'package.json': manifestSource,
+  'README.md': readme,
+  Dockerfile: dockerfile,
+  '.github/workflows/ci.yml': ciWorkflow,
+}
+
+interface Citation {
+  file: string
+  from: number
+  to: number
+  /** The line the citation sits on, whose other backticks name what it points at. */
+  sentence: string
+}
+
+const CITATIONS = /`([\w./-]+\.(?:ts|json|yml|md|css|mjs)):(\d+(?:-\d+)?)`/g
+const IS_CITATION = /^[\w./-]+\.(?:ts|json|yml|md|css|mjs):\d+(?:-\d+)?$/
+
+const citations: Citation[] = agentsGuide.split('\n').flatMap((line) =>
+  [...line.matchAll(CITATIONS)].map((cited) => {
+    const bounds = cited[2].split('-').map(Number)
+    return {
+      file: cited[1],
+      from: bounds[0],
+      to: bounds[bounds.length - 1],
+      sentence: line,
+    }
+  }),
+)
+
+/** The identifiers a citing line names in backticks, the citation itself aside. */
+const identifiersNamedOn = (sentence: string): string[] =>
+  [...sentence.matchAll(/`([^`]+)`/g)]
+    .map((span) => span[1])
+    .filter((span) => !IS_CITATION.test(span))
+    .flatMap((span) => span.split(/[^A-Za-z0-9_]+/))
+    // Two characters and under match almost any line of code by accident.
+    .filter((identifier) => identifier.length > 2)
+
+describe('AGENTS.md still cites the source it describes', () => {
+  it('cites files that exist', () => {
+    expect(
+      citations.length,
+      'AGENTS.md has no `path:line` citations — the format they are parsed from has changed',
+    ).toBeGreaterThan(0)
+
+    const missing = citations
+      .filter((citation) => !(citation.file in citableText))
+      .map((citation) => `${citation.file}:${citation.from}`)
+
+    expect(
+      missing,
+      `AGENTS.md citations naming a file that does not exist: ${missing.join(', ')}`,
+    ).toEqual([])
+  })
+
+  it('cites lines that name what the sentence around them names', () => {
+    const stale = citations
+      .filter((citation) => {
+        // Absent files are the assertion above; reporting them twice helps nobody.
+        if (!(citation.file in citableText)) return false
+
+        const cited = citableText[citation.file].split('\n').slice(citation.from - 1, citation.to)
+        const named = identifiersNamedOn(citation.sentence)
+
+        return !cited.some((line) => named.some((identifier) => line.includes(identifier)))
+      })
+      .map((citation) => `${citation.file}:${citation.from}`)
+
+    expect(
+      stale,
+      `AGENTS.md citations whose lines are out of range or no longer mention ` +
+        `anything the citing sentence names: ${stale.join(', ')}`,
+    ).toEqual([])
   })
 })
