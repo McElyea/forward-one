@@ -6,8 +6,9 @@ compiles, and the ones where the obvious first attempt is wrong.
 
 Everything below was verified against the source it cites. When a claim and the code
 disagree, the code is right and this file is a bug. The `file:line` citations are held to
-that by `src/docs.test.ts`: a cited line that stops naming what the sentence around it
-names fails the suite, rather than waiting for someone to re-read this file.
+that by `src/docs.test.ts`: a cited line that stops naming what the line citing it names
+fails the suite, rather than waiting for someone to re-read this file. Write a citation on
+the same line as the symbol it points at, so that check can see both.
 
 ## The gate
 

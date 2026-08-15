@@ -149,6 +149,10 @@ describe('the container image stays in step with the project it builds', () => {
  * sentence names in backticks has to appear on one of them. A citation that slides
  * onto a different line still mentioning the same symbol passes, so this replaces
  * none of the reading — it only stops the drift that nobody would notice.
+ *
+ * The sentence is taken to be the one line of `AGENTS.md` the citation sits on,
+ * which asks one thing of whoever writes the next citation: keep it on the same
+ * line as the symbol it points at, rather than wrapping between them.
  */
 
 /** The files `AGENTS.md` cites, keyed the way it writes their paths. */
