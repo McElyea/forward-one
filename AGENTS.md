@@ -5,7 +5,10 @@ game is and how to run it; this file covers the constraints that decide whether 
 compiles, and the ones where the obvious first attempt is wrong.
 
 Everything below was verified against the source it cites. When a claim and the code
-disagree, the code is right and this file is a bug.
+disagree, the code is right and this file is a bug. The `file:line` citations are held to
+that by `src/docs.test.ts`: a cited line that stops naming what the line citing it names
+fails the suite, rather than waiting for someone to re-read this file. Write a citation on
+the same line as the symbol it points at, so that check can see both.
 
 ## The gate
 
@@ -82,10 +85,16 @@ Class-field initializers therefore run exactly once, at construction — never a
 second visit.
 
 This means any mutable scene state must be reset in `init()`, not by a field initializer.
-`RiverScene.init()` (`src/game/scenes/RiverScene.ts:73`) is the reference: it reassigns
-every field it owns on entry. `MenuScene` has no `init()`, which is the cause of
-[#1](https://github.com/McElyea/forward-one/issues/1) — its `levelCards` array keeps
-growing each time the player returns to the put-in screen.
+`RiverScene.init()` (`src/game/scenes/RiverScene.ts:99`) is the reference: it reassigns
+every field it owns on entry, down to the `layoutAppliers` array of placement closures.
+`MenuScene.init()` (`src/game/scenes/MenuScene.ts:44`) does the same for the put-in screen.
+
+`MenuScene` is also the worked example of what happens without one. It had no `init()` until
+[#11](https://github.com/McElyea/forward-one/pull/11), so `create()` pushed four more level
+cards onto the same array on every visit and the code that read a level back by card position
+threw from the fifth card on — [#1](https://github.com/McElyea/forward-one/issues/1), which
+made the game one run per page load. The fix was both halves: clear the per-visit state
+in `init()`, and stop correlating two arrays by position (`src/game/ui/levelSelection.ts`).
 
 When adding a field to a scene, ask what its value is on the *second* `create()`. If the
 answer is "whatever the last visit left there", it belongs in `init()`.
@@ -104,8 +113,8 @@ in this repo, and `package.json` runs a bare `vitest run` — so vitest's defaul
   top-level `test/` tree.
 
 The practical consequence: **to make something testable, extract it.** This is why
-`getSelectedGuideVoiceId()` and `selectGuideVoice()` (`src/game/audio/guideAudio.ts:25`
-and `:34`, both reading `window.localStorage`) have no coverage, while the pure helpers
+`getSelectedGuideVoiceId()` and `selectGuideVoice()` (`src/game/audio/guideAudio.ts:23`
+and `:32`, both reading `window.localStorage`) have no coverage, while the pure helpers
 beside them in the same file do. Covering the browser-dependent half would require adding
 a `vite.config.ts` with `test.environment: 'jsdom'` plus the dependency — a deliberate
 change, not something to slip into an unrelated PR.
@@ -133,8 +142,9 @@ Nothing will reformat your code or catch style drift. What `tsconfig.json` does 
 - `strict` (`:18`) — `strictNullChecks`, `noImplicitAny` and the rest are on. Fix a strict
   error by narrowing, not with `!`, `as any`, or `@ts-expect-error`.
 
-`noUncheckedIndexedAccess` is **not** set. It currently reports 14 errors, several of them
-real — including the array access behind [#1](https://github.com/McElyea/forward-one/issues/1).
+`noUncheckedIndexedAccess` is **not** set, which is why an unguarded array access compiles
+here. `npx tsc --noUncheckedIndexedAccess` lists what turning it on would report — read that
+list before assuming an index is safe, and enable the flag only as a change of its own.
 
 ## Do not touch
 
@@ -142,7 +152,7 @@ real — including the array access behind [#1](https://github.com/McElyea/forwa
   stroke counts). They are produced by `npm run voice:generate`, which downloads an 82M
   Kokoro model. Never hand-edit, re-encode, or add a clip by hand; regenerate. `kokoro-js`
   is a dev dependency and players never download the model.
-- **The `sharp` override** in `package.json:23-25` — pinned to `0.35.3` for `kokoro-js`.
+- **The `sharp` override** in `package.json:26-28` — pinned to `0.35.3` for `kokoro-js`.
   Dropping it breaks voice generation.
 - **`src/game/levels.ts`** — cue timing and level data are gameplay-feel decisions. Fixing
   a defect that happens to live nearby is fine; retuning the difficulty is not, unless that
