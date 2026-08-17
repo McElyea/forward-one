@@ -3,9 +3,14 @@
    time, and never restyles it the way DOM text is restyled — so a font that
    arrives late is a font the menu never shows. A third-party @import is three
    serialised hops (this file, the font stylesheet, the font file) and loses
-   that race on a cold mobile load. These are the same Google Fonts subsets,
-   byte for byte; the weights and unicode-ranges below mirror the stylesheet
-   that @import used to return. src/main.ts waits on them before booting.
+   that race on a cold mobile load. Each file below is byte-for-byte the woff2
+   Google Fonts serves for that family, weight, and subset, and the
+   unicode-ranges are copied verbatim from the stylesheet the @import returned.
+   What is deliberately *not* copied is the rest of the subsets: Google also
+   serves vietnamese for Barlow Condensed and vietnamese, greek, and cyrillic
+   for Inter. Every string this game draws is latin, so those are dropped
+   rather than shipped unused. Adding non-latin copy means adding the matching
+   subsets here. src/main.ts waits on these before booting.
 
    Inter is a variable font (one wght axis, 100-900), so a single face per
    subset covers 400/600/700. Barlow Condensed is static and ships a separate
