@@ -32,7 +32,7 @@ Every push to `main` and every pull request runs `npm ci`, `npm run build`, and 
 
 The `dist/` directory is a static site and can be deployed to Cloudflare Pages, Vercel, Netlify, GitHub Pages, or itch.io.
 
-Barlow Condensed and Inter are bundled rather than fetched from Google Fonts, so a deployed build makes no third-party requests at runtime. This is a correctness requirement and not only a privacy one: Phaser rasterizes each text object into a texture once and never restyles it, so a font that arrives after the menu is drawn never appears. `src/main.ts` waits for the faces before starting the game, with a timeout so a font failure still boots.
+Barlow Condensed and Inter are bundled rather than fetched from Google Fonts, so a deployed build makes no third-party requests at runtime. This is a correctness requirement and not only a privacy one: Phaser rasterizes each text object into a texture once and never restyles it, so a font that arrives after the menu is drawn never appears. `src/main.ts` waits for the faces before starting the game, with a timeout so a font failure still boots. Both families are third-party font software under the SIL Open Font License 1.1 rather than this repository's MIT license — see [`src/assets/fonts/LICENSE.txt`](src/assets/fonts/LICENSE.txt).
 
 ## Run it in a container
 
@@ -63,7 +63,7 @@ src/game/
   ui/layout.ts              viewport-driven regions and type scale
   ui/fontLoading.ts         gates boot until the bundled faces are usable
 
-src/assets/fonts/           self-hosted Barlow Condensed and Inter (woff2)
+src/assets/fonts/           self-hosted Barlow Condensed and Inter (woff2, OFL 1.1)
 ```
 
 ## Contributing
