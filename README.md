@@ -58,6 +58,7 @@ src/game/
   race/RaceAdapter.ts       solo/multiplayer boundary
   race/SimulatedRaceAdapter.ts
   survival/SurvivalEngine.ts endless obstacle schedule, intensity, ejection, and recovery
+  run/runOutcome.ts         what the summary screen says when a run ends
   scenes/MenuScene.ts
   scenes/RiverScene.ts
   ui/layout.ts              viewport-driven regions and type scale
