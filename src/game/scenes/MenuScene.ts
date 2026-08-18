@@ -3,7 +3,7 @@ import {
   getSelectedGuideVoiceId,
   GUIDE_VOICES,
   guideAudioKey,
-  loadGuideAudio,
+  loadGuideVoicePreviews,
   selectGuideVoice,
   type GuideVoiceId,
 } from '../audio/guideAudio'
@@ -52,7 +52,8 @@ export class MenuScene extends Phaser.Scene {
   }
 
   preload(): void {
-    loadGuideAudio(this)
+    // The put-in screen only ever plays a preview, so one clip per voice is enough.
+    loadGuideVoicePreviews(this)
   }
 
   create(): void {
