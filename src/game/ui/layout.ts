@@ -217,6 +217,57 @@ export function menuLayout(
   }
 }
 
+/** One line of text on a level card: where it starts, and how big it is. */
+export interface LevelCardLine {
+  x: number
+  y: number
+  size: number
+}
+
+export interface LevelCardText {
+  classLabel: LevelCardLine
+  number: LevelCardLine
+  name: LevelCardLine
+}
+
+/**
+ * How much vertical room a line of text takes, as a multiple of its font size.
+ * Phaser measures the font's own ascent and descent, which for the two bundled
+ * faces sits a little above the em box; 1.15 covers that with room to spare.
+ */
+export const LINE_HEIGHT = 1.15
+
+/**
+ * Type and insets for one level card, measured from the card and not the
+ * viewport.
+ *
+ * The horizontal inset used to be the vertical one too. Card height is capped
+ * (see `cardHeight` above) while card width follows the viewport, so on a wide
+ * portrait tablet that inset grew until the rapid-class numeral — sized from
+ * the whole card — was drawn straight through the level name. The numeral now
+ * takes only the band the two labels leave it, and shrinks when that band does.
+ */
+export function levelCardText(card: Rect): LevelCardText {
+  const padX = round(clamp(card.width * 0.09, 12, 26))
+  const padY = round(clamp(card.height * 0.1, 6, 16))
+  const labelSize = round(clamp(card.height * 0.11, 10, 15))
+
+  // Rounded away from the neighbouring line in each case, so the whole-pixel
+  // positions keep the clearance the unrounded arithmetic gives them.
+  const numberTop = Math.ceil(padY + labelSize * LINE_HEIGHT)
+  const nameTop = Math.floor(card.height - padY - labelSize * LINE_HEIGHT)
+  const numberSize = Math.floor(
+    clamp((nameTop - numberTop) / LINE_HEIGHT, 12, card.height * 0.46),
+  )
+
+  return {
+    classLabel: { x: padX, y: padY, size: labelSize },
+    // A digit reads as inset by its own side bearing, so it starts a pixel left.
+    number: { x: padX - 1, y: numberTop, size: numberSize },
+    name: { x: padX, y: nameTop, size: labelSize },
+  }
+}
+
 // ---------------------------------------------------------------------------
 // River
 // ---------------------------------------------------------------------------

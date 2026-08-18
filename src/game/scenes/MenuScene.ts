@@ -9,7 +9,7 @@ import {
 } from '../audio/guideAudio'
 import { LEVELS } from '../levels'
 import type { LevelConfig, RaceMode } from '../types'
-import { menuLayout, type MenuLayout } from '../ui/layout'
+import { levelCardText, menuLayout, type MenuLayout } from '../ui/layout'
 import { LevelSelection } from '../ui/levelSelection'
 import { bodyStyle, COLORS, headingStyle, hexToNumber } from '../ui/theme'
 
@@ -203,24 +203,27 @@ export class MenuScene extends Phaser.Scene {
 
     // Card type is sized from the card, not the viewport, so a short landscape
     // card does not overflow with a numeral meant for a tall one.
-    const numberSize = Math.round(rect.height * 0.46)
-    const labelSize = Math.round(Math.max(10, rect.height * 0.11))
-    const pad = Math.round(rect.width * 0.09)
+    const text = levelCardText(rect)
 
     const classLabel = this.add
-      .text(pad, pad * 0.7, 'CLASS', headingStyle(labelSize, '#9bb9b4'))
+      .text(
+        text.classLabel.x,
+        text.classLabel.y,
+        'CLASS',
+        headingStyle(text.classLabel.size, '#9bb9b4'),
+      )
       .setLetterSpacing(1.5)
     const number = this.add.text(
-      pad - 1,
-      pad * 0.7 + labelSize * 1.1,
+      text.number.x,
+      text.number.y,
       `${level.rapidClass}`,
-      headingStyle(numberSize, level.accent),
+      headingStyle(text.number.size, level.accent),
     )
     const name = this.add.text(
-      pad,
-      rect.height - pad * 0.7 - labelSize * 1.2,
+      text.name.x,
+      text.name.y,
       level.name.toUpperCase(),
-      headingStyle(labelSize, '#f5f1df'),
+      headingStyle(text.name.size, '#f5f1df'),
     )
 
     background.on('pointerdown', () => {
