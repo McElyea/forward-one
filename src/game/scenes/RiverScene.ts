@@ -11,6 +11,7 @@ import { SimulatedRaceAdapter } from '../race/SimulatedRaceAdapter'
 import { SoloRaceAdapter } from '../race/SoloRaceAdapter'
 import type { RaceAdapter } from '../race/RaceAdapter'
 import { rankRacers } from '../race/rankRacers'
+import { placeOfLocal, runOutcome } from '../run/runOutcome'
 import { spreadRailLabels } from '../race/railLabels'
 import { RhythmEngine } from '../rhythm/RhythmEngine'
 import {
@@ -879,12 +880,14 @@ export class RiverScene extends Phaser.Scene {
     this.completed = true
     this.activeGuideCall?.stop()
     const sorted = rankRacers(this.racers)
-    const place = Math.max(1, sorted.findIndex((racer) => racer.isLocal) + 1)
-    const placeLabel = ['FIRST', 'SECOND', 'THIRD', 'FOURTH'][place - 1] ?? `${place}TH`
-    const headingLabel = this.mode === 'solo' ? 'SWEPT AWAY' : `${placeLabel} PLACE`
-    const blurbLabel = this.mode === 'solo'
-      ? `You survived ${Math.floor(elapsed / 1000)} seconds on ${this.level.name}. Read each obstacle and hold the line longer next run.`
-      : `${placeLabel} after ${Math.floor(elapsed / 1000)} seconds on ${this.level.name}. The last paddler in the water wins.`
+    const outcome = runOutcome(
+      this.mode,
+      placeOfLocal(sorted),
+      elapsed,
+      this.level.name,
+    )
+    const headingLabel = outcome.heading
+    const blurbLabel = outcome.blurb
 
     const scrim = this.add.rectangle(0, 0, 10, 10, COLORS.ink, 0.82).setOrigin(0).setDepth(50)
     const heading = this.add
