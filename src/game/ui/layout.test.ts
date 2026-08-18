@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   LINE_HEIGHT,
   MIN_TOUCH_PX,
+  descriptionLineSpacing,
   gutter,
   layoutMode,
   levelCardText,
@@ -170,6 +171,47 @@ describe('menuLayout', () => {
 
     expect(second.x).toBeGreaterThan(first.x) // same row, next column
     expect(third.y).toBeGreaterThanOrEqual(first.y + first.height) // next row
+  })
+
+  it.each(VIEWPORTS)('keeps the description clear of the controls on $name', ({
+    width,
+    height,
+  }) => {
+    const layout = menuLayout(width, height, LEVEL_COUNT, VOICE_COUNT)
+    const descriptionLines = layout.detail.width >= layout.type.body * 0.47 * 70 ? 1 : 2
+    const drawnBottom =
+      layout.detail.y +
+      layout.detailLabel * 1.25 +
+      layout.type.body * LINE_HEIGHT * descriptionLines +
+      descriptionLineSpacing(layout.type.body) * (descriptionLines - 1)
+
+    // The label was `type.title` whatever the room, so on a landscape phone the
+    // description was drawn under the mode buttons.
+    expect(
+      drawnBottom,
+      'the level description is drawn into the controls row',
+    ).toBeLessThanOrEqual(layout.modeButtons[0].y)
+    expect(layout.detail.y + layout.detail.height).toBeLessThanOrEqual(
+      layout.modeButtons[0].y,
+    )
+  })
+
+  it.each(VIEWPORTS)('keeps the description label readable on $name', ({
+    width,
+    height,
+  }) => {
+    const layout = menuLayout(width, height, LEVEL_COUNT, VOICE_COUNT)
+
+    expect(layout.detailLabel).toBeGreaterThanOrEqual(layout.type.body)
+    expect(layout.detailLabel).toBeLessThanOrEqual(layout.type.title)
+  })
+
+  it('spends the room on the label where there is room to spend', () => {
+    const desktop = menuLayout(1440, 900, LEVEL_COUNT, VOICE_COUNT)
+    const shortLandscape = menuLayout(667, 375, LEVEL_COUNT, VOICE_COUNT)
+
+    expect(desktop.detailLabel).toBe(desktop.type.title)
+    expect(shortLandscape.detailLabel).toBeLessThan(shortLandscape.type.title)
   })
 
   it.each(VIEWPORTS)('leaves the level description room to render on $name', ({
