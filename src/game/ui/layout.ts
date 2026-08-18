@@ -37,6 +37,13 @@ export interface Typography {
 /** Minimum size for anything a finger has to hit, per WCAG target-size guidance. */
 export const MIN_TOUCH_PX = 44
 
+/**
+ * How much vertical room a line of text takes, as a multiple of its font size.
+ * Phaser measures the font's own ascent and descent, which for the two bundled
+ * faces sits a little above the em box; 1.15 covers that with room to spare.
+ */
+export const LINE_HEIGHT = 1.15
+
 const clamp = (value: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, value))
 
@@ -70,6 +77,11 @@ export function gutter(width: number, height: number): number {
 // Menu
 // ---------------------------------------------------------------------------
 
+/** Extra room between the description's wrapped lines. */
+export function descriptionLineSpacing(body: number): number {
+  return round(body * 0.4)
+}
+
 export interface MenuLayout {
   mode: LayoutMode
   width: number
@@ -83,6 +95,8 @@ export interface MenuLayout {
   cards: Rect[]
   cardColumns: number
   detail: Rect
+  /** Font size for the `CLASS n / NAME` line above the description. */
+  detailLabel: number
   modeButtons: [Rect, Rect]
   voicePanel: Rect
   voiceButtons: Rect[]
@@ -117,10 +131,17 @@ export function menuLayout(
     mode === 'landscape' ? Math.max(buttonHeight, voiceHeight) : buttonHeight + gap + voiceHeight
   const controlsTop = height - g - hintHeight - controlsRowHeight
 
-  // --- Cards take what is left over, after reserving the description a floor
-  // of roughly two wrapped lines. Sizing them from width alone is what used to
-  // push the description off a short screen.
-  const detailMin = round(type.body * 3.2)
+  // --- Cards take what is left over, after reserving the description block a
+  // floor. Sizing them from width alone is what used to push the description
+  // off a short screen.
+  // The description block is a label line above the description itself, so the
+  // reserve has to hold both. Two body lines alone left the label out of the
+  // sum, which is how the description ended up under the mode buttons.
+  const descriptionLines = contentWidth >= type.body * 0.47 * 70 ? 1 : 2
+  const descriptionHeight =
+    type.body * LINE_HEIGHT * descriptionLines +
+    descriptionLineSpacing(type.body) * (descriptionLines - 1)
+  const detailMin = round(type.body * 1.25 + descriptionHeight)
   const cardColumns = mode === 'landscape' ? Math.min(levelCount, 4) : 2
   const cardRows = Math.ceil(levelCount / cardColumns)
   const cardWidth = (contentWidth - gap * (cardColumns - 1)) / cardColumns
@@ -184,6 +205,16 @@ export function menuLayout(
     })
   }
 
+  // The label used to be `type.title` whatever the room. It now takes what the
+  // region has left after the description, down to body size.
+  const detailHeight = round(Math.max(type.body * 2, controlsTop - gap - detailTop))
+  // The longest level description runs about 70 characters, and condensed body
+  // text averages a little under half its size per character, so this is where
+  // the description stops needing a second line.
+  const detailLabel = round(
+    clamp((detailHeight - descriptionHeight) / 1.25, type.body, type.title),
+  )
+
   return {
     mode,
     width,
@@ -200,8 +231,9 @@ export function menuLayout(
       x: round(g),
       y: round(detailTop),
       width: round(contentWidth),
-      height: round(Math.max(type.body * 2, controlsTop - gap - detailTop)),
+      height: detailHeight,
     },
+    detailLabel,
     modeButtons: [
       { x: round(g), y: round(modeTop), width: round(modeWidth), height: buttonHeight },
       {
@@ -229,13 +261,6 @@ export interface LevelCardText {
   number: LevelCardLine
   name: LevelCardLine
 }
-
-/**
- * How much vertical room a line of text takes, as a multiple of its font size.
- * Phaser measures the font's own ascent and descent, which for the two bundled
- * faces sits a little above the em box; 1.15 covers that with room to spare.
- */
-export const LINE_HEIGHT = 1.15
 
 /**
  * Type and insets for one level card, measured from the card and not the

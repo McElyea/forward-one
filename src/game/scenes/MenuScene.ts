@@ -9,7 +9,7 @@ import {
 } from '../audio/guideAudio'
 import { LEVELS } from '../levels'
 import type { LevelConfig, RaceMode } from '../types'
-import { levelCardText, menuLayout, type MenuLayout } from '../ui/layout'
+import { descriptionLineSpacing, levelCardText, menuLayout, type MenuLayout } from '../ui/layout'
 import { LevelSelection } from '../ui/levelSelection'
 import { bodyStyle, COLORS, headingStyle, hexToNumber } from '../ui/theme'
 
@@ -98,16 +98,16 @@ export class MenuScene extends Phaser.Scene {
       this.layout.detail.x,
       this.layout.detail.y,
       '',
-      headingStyle(type.title),
+      headingStyle(this.layout.detailLabel),
     )
     this.description = this.add.text(
       this.layout.detail.x,
-      this.layout.detail.y + type.title * 1.25,
+      this.layout.detail.y + this.layout.detailLabel * 1.25,
       '',
       {
         ...bodyStyle(type.body, '#9bb9b4'),
         wordWrap: { width: this.layout.detail.width },
-        lineSpacing: Math.round(type.body * 0.4),
+        lineSpacing: descriptionLineSpacing(type.body),
       },
     )
     this.renderSelection()
