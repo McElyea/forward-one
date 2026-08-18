@@ -7,7 +7,7 @@ export const LEVELS: LevelConfig[] = [
     name: 'Warm-up Run',
     description: 'Wide channels, clean wave trains, and room to learn the guide’s calls.',
     accent: '#ffc857',
-    durationMs: 38_000,
+    survivalBenchmarkMs: 38_000,
     cues: [
       { at: 4_200, direction: 'forward', strokes: 1 },
       { at: 7_600, direction: 'forward', strokes: 2 },
@@ -24,7 +24,7 @@ export const LEVELS: LevelConfig[] = [
     name: 'Broken Water',
     description: 'Irregular waves introduce faster calls and shorter recovery gaps.',
     accent: '#ff9f5a',
-    durationMs: 37_000,
+    survivalBenchmarkMs: 37_000,
     cues: [
       { at: 3_700, direction: 'forward', strokes: 2 },
       { at: 7_100, direction: 'backward', strokes: 3, interval: 520 },
@@ -42,7 +42,7 @@ export const LEVELS: LevelConfig[] = [
     name: 'The Narrows',
     description: 'Precise four-stroke drives thread constricted passages and heavy water.',
     accent: '#ff6b4a',
-    durationMs: 36_000,
+    survivalBenchmarkMs: 36_000,
     cues: [
       { at: 3_500, direction: 'forward', strokes: 3, interval: 470 },
       { at: 7_600, direction: 'backward', strokes: 1 },
@@ -59,7 +59,7 @@ export const LEVELS: LevelConfig[] = [
     name: 'No Mistakes',
     description: 'Long, powerful rapids chain every call into one sustained final run.',
     accent: '#e84a5f',
-    durationMs: 35_000,
+    survivalBenchmarkMs: 35_000,
     cues: [
       { at: 3_200, direction: 'forward', strokes: 4, interval: 420 },
       { at: 7_200, direction: 'backward', strokes: 2, interval: 400 },

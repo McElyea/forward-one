@@ -16,6 +16,8 @@ describe('SoloRaceAdapter', () => {
     expect(snapshots[0].id).toBe('local')
     expect(snapshots[0].isLocal).toBe(true)
     expect(snapshots[0].connected).toBe(true)
+    expect(snapshots[0].survivalMs).toBe(12_000)
+    expect(snapshots[0].eliminated).toBe(false)
   })
 
   it('passes local progress through untouched', () => {
@@ -28,10 +30,13 @@ describe('SoloRaceAdapter', () => {
     expect(adapter.update(9_000, 1.4).map((snapshot) => snapshot.progress)).toEqual([1.4])
   })
 
-  it('ignores elapsed time entirely', () => {
+  it('reports survival time and whether the local paddler was eliminated', () => {
     const adapter = new SoloRaceAdapter()
 
-    expect(adapter.update(0, 0.25)).toEqual(adapter.update(240_000, 0.25))
+    expect(adapter.update(240_000, 0.25, true)[0]).toMatchObject({
+      survivalMs: 240_000,
+      eliminated: true,
+    })
   })
 
   it('reports the same paddler whether or not start() ran', () => {

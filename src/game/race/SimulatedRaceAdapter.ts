@@ -3,23 +3,52 @@ import type { RaceAdapter } from './RaceAdapter'
 
 const clamp = (value: number): number => Math.max(0, Math.min(1, value))
 
+const RIVAL_SURVIVAL_MULTIPLIER = {
+  maya: 2.15,
+  eli: 1.65,
+  jo: 1.3,
+}
+
+const RAIL_SPAN_MULTIPLIER = 2.25
+
 /**
  * Stand-in for the future Supabase adapter. It exercises the exact snapshots
- * and progress rail that live multiplayer will use, without needing credentials.
+ * and survival rail that live multiplayer will use, without needing credentials.
  */
 export class SimulatedRaceAdapter implements RaceAdapter {
   readonly kind = 'multiplayer-preview' as const
-  private durationMs = 38_000
+  private survivalBaselineMs = 38_000
 
-  start(durationMs: number): void {
-    this.durationMs = durationMs
+  start(survivalBaselineMs: number): void {
+    this.survivalBaselineMs = survivalBaselineMs
   }
 
   recordStroke(_judgment: StrokeJudgment): void {}
 
-  update(elapsedMs: number, localProgress: number): RacerSnapshot[] {
-    const raceTime = elapsedMs / this.durationMs
-    const surge = Math.sin(elapsedMs / 2_600) * 0.016
+  update(
+    elapsedMs: number,
+    localProgress: number,
+    localEliminated = false,
+  ): RacerSnapshot[] {
+    const railSpanMs = this.survivalBaselineMs * RAIL_SPAN_MULTIPLIER
+    const rival = (
+      id: keyof typeof RIVAL_SURVIVAL_MULTIPLIER,
+      name: string,
+      color: number,
+    ): RacerSnapshot => {
+      const survivalLimitMs = this.survivalBaselineMs * RIVAL_SURVIVAL_MULTIPLIER[id]
+      const survivalMs = Math.min(elapsedMs, survivalLimitMs)
+      return {
+        id,
+        name,
+        color,
+        progress: clamp(survivalMs / railSpanMs),
+        survivalMs,
+        eliminated: elapsedMs >= survivalLimitMs,
+        isLocal: false,
+        connected: true,
+      }
+    }
 
     return [
       {
@@ -27,33 +56,14 @@ export class SimulatedRaceAdapter implements RaceAdapter {
         name: 'YOU',
         color: 0xffc857,
         progress: localProgress,
+        survivalMs: elapsedMs,
+        eliminated: localEliminated,
         isLocal: true,
         connected: true,
       },
-      {
-        id: 'maya',
-        name: 'MAYA',
-        color: 0x56d6c9,
-        progress: clamp(raceTime * 0.93 + surge),
-        isLocal: false,
-        connected: true,
-      },
-      {
-        id: 'eli',
-        name: 'ELI',
-        color: 0xef6f9f,
-        progress: clamp(raceTime * 0.86 - surge * 0.6),
-        isLocal: false,
-        connected: true,
-      },
-      {
-        id: 'jo',
-        name: 'JO',
-        color: 0xb695ff,
-        progress: clamp(raceTime * 0.8 + Math.sin(elapsedMs / 1_900) * 0.01),
-        isLocal: false,
-        connected: true,
-      },
+      rival('maya', 'MAYA', 0x56d6c9),
+      rival('eli', 'ELI', 0xef6f9f),
+      rival('jo', 'JO', 0xb695ff),
     ]
   }
 

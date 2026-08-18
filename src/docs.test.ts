@@ -26,7 +26,10 @@ const manifest = JSON.parse(manifestSource) as PackageManifest
 
 /** The body of the first fenced block under a `## ` heading, without its fences. */
 const fencedBlockUnder = (heading: string, language: string): string => {
-  const pattern = new RegExp(`## ${heading}\\n+\`\`\`${language}\\n([\\s\\S]*?)\\n\`\`\``)
+  const newline = '\\r?\\n'
+  const pattern = new RegExp(
+    `## ${heading}(?:${newline})+\`\`\`${language}${newline}([\\s\\S]*?)${newline}\`\`\``,
+  )
   const block = pattern.exec(readme)
   if (block === null) {
     throw new Error(`README has no \`\`\`${language} block under "## ${heading}"`)

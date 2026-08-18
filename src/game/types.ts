@@ -20,7 +20,8 @@ export interface LevelConfig {
   name: string
   description: string
   accent: string
-  durationMs: number
+  /** Baseline used to scale the simulated rivals' survival times. */
+  survivalBenchmarkMs: number
   cues: PaddleCue[]
 }
 
@@ -44,7 +45,10 @@ export interface RacerSnapshot {
   id: string
   name: string
   color: number
+  /** Position on the survival rail, normalised to the selected water's benchmark. */
   progress: number
+  survivalMs: number
+  eliminated: boolean
   isLocal: boolean
   connected: boolean
 }

@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/McElyea/forward-one/actions/workflows/ci.yml/badge.svg)](https://github.com/McElyea/forward-one/actions/workflows/ci.yml)
 
-A browser-first whitewater rhythm racer built with Phaser 4, TypeScript, and Vite.
+A browser-first whitewater survival racer built with Phaser 4, TypeScript, and Vite.
 
-The scaffold includes a playable timing loop, data definitions for Class II–V levels, solo mode, and a multiplayer preview with simulated racers. The simulation implements the same `RaceAdapter` interface a future Supabase realtime room will use.
+The game combines an escalating guide-call rhythm loop with rocks, strainers, cross-currents, and wave trains. Class II–V water sets the starting pressure, then calls repeat faster until the player is swept away. Solo mode records survival time; the multiplayer preview asks the player to outlast three simulated racers behind the same `RaceAdapter` interface a future hosted room will use.
 
 ## Run it locally
 
@@ -15,7 +15,7 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite. Use Space, F, or ↑ for forward strokes and B or ↓ for backwards strokes; touch devices have a large button for each direction. The layout adapts to the viewport in both orientations, so it plays on a phone as well as a desktop. Each guide call is entirely forward or entirely backwards. Press the requested direction when a paddle marker reaches the yellow timing line. Escape returns to the menu. The put-in screen offers four bundled Kokoro guide voices—Bella, Heart, Liam, and Eric—with Bella as the default. Selecting a voice previews and remembers it on that device.
+Open the local URL printed by Vite. Use Space, F, or ↑ for forward strokes and B or ↓ for backwards strokes; touch devices have a large button for each direction. The layout adapts to the viewport in both orientations, so it plays on a phone as well as a desktop. Each guide call is entirely forward or entirely backwards and is tied to an approaching river obstacle. Press the requested direction when a paddle marker reaches the yellow timing line. Three failed obstacle calls throw the player overboard. While swimming, land two calls to regain the raft; miss two consecutive recovery calls and the run ends. Escape returns to the menu. The put-in screen offers four bundled Kokoro guide voices—Bella, Heart, Liam, and Eric—with Bella as the default. Selecting a voice previews and remembers it on that device.
 
 ## Commands
 
@@ -57,7 +57,7 @@ src/game/
   rhythm/RhythmEngine.ts    framework-independent timing judgments
   race/RaceAdapter.ts       solo/multiplayer boundary
   race/SimulatedRaceAdapter.ts
-  run/runOutcome.ts         whether a run has finished, timed out, or is still going
+  survival/SurvivalEngine.ts endless obstacle schedule, intensity, ejection, and recovery
   scenes/MenuScene.ts
   scenes/RiverScene.ts
   ui/layout.ts              viewport-driven regions and type scale
@@ -72,7 +72,7 @@ src/assets/fonts/           self-hosted Barlow Condensed and Inter (woff2, OFL 1
 
 ## Multiplayer path
 
-The first hosted multiplayer implementation should add a `SupabaseRaceAdapter` without changing `RiverScene`. It will use Presence for lobby membership and Broadcast for the shared start time, progress snapshots, and finish events. Client input-event records can later support server validation and ghost races.
+The first hosted multiplayer implementation should add a `SupabaseRaceAdapter` without changing `RiverScene`. It will use Presence for lobby membership and Broadcast for the shared start time, survival snapshots, and elimination events. Client input-event records can later support server validation and ghost races.
 
 ## License
 

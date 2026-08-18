@@ -85,7 +85,7 @@ Class-field initializers therefore run exactly once, at construction — never a
 second visit.
 
 This means any mutable scene state must be reset in `init()`, not by a field initializer.
-`RiverScene.init()` (`src/game/scenes/RiverScene.ts:99`) is the reference: it reassigns
+`RiverScene.init()` (`src/game/scenes/RiverScene.ts:119`) is the reference: it reassigns
 every field it owns on entry, down to the `layoutAppliers` array of placement closures.
 `MenuScene.init()` (`src/game/scenes/MenuScene.ts:44`) does the same for the put-in screen.
 
@@ -134,7 +134,7 @@ Nothing will reformat your code or catch style drift. What `tsconfig.json` does 
   `import type { … }` for anything from `src/game/types.ts`.
 - `noUnusedLocals` and `noUnusedParameters` (`:19-20`) — an unused import or parameter
   **fails the build**, it is not a warning. Prefix a deliberately-unused parameter with `_`,
-  as `SoloRaceAdapter.update()` does.
+  as `SoloRaceAdapter.recordStroke()` does.
 - `erasableSyntaxOnly` (`:21`) — rejects any TypeScript syntax that emits runtime code. In
   practice that means **constructor parameter properties**: `constructor(private readonly
   levels: …)` fails to compile. Declare the field and assign it in the body instead.

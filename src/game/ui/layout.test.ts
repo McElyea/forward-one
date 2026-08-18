@@ -262,6 +262,15 @@ describe('riverLayout', () => {
     // The rail steals width on the right, so the centre is left of the canvas centre.
     expect(landscape.call.x).toBeLessThan(852 / 2)
   })
+
+  it.each(VIEWPORTS)('keeps the survival status inside the river on $name', ({ width, height }) => {
+    const layout = riverLayout(width, height)
+
+    expect(layout.survivalStatus.x).toBeGreaterThanOrEqual(layout.river.x)
+    expect(layout.survivalStatus.x).toBeLessThanOrEqual(layout.river.x + layout.river.width)
+    expect(layout.survivalStatus.y).toBeGreaterThanOrEqual(layout.river.y)
+    expect(layout.survivalStatus.y).toBeLessThanOrEqual(layout.river.y + layout.river.height)
+  })
 })
 
 describe('gutter', () => {

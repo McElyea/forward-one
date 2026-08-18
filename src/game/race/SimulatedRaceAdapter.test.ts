@@ -17,6 +17,7 @@ describe('SimulatedRaceAdapter', () => {
     expect(snapshots.map((snapshot) => snapshot.name)).toEqual(['YOU', 'MAYA', 'ELI', 'JO'])
     expect(snapshots.map((snapshot) => snapshot.isLocal)).toEqual([true, false, false, false])
     expect(snapshots.every((snapshot) => snapshot.connected)).toBe(true)
+    expect(snapshots.every((snapshot) => !snapshot.eliminated)).toBe(true)
   })
 
   it('passes local progress through without simulating it', () => {
@@ -42,29 +43,33 @@ describe('SimulatedRaceAdapter', () => {
     const adapter = new SimulatedRaceAdapter()
     adapter.start(DEFAULT_DURATION_MS)
 
-    // The surge terms are sin(0), so the rails begin exactly at zero.
+    // Survival time begins at zero for everyone.
     expect(adapter.update(0, 0).slice(1).map((rival) => rival.progress)).toEqual([0, 0, 0])
   })
 
-  it('pins the rival rails at the halfway mark', () => {
+  it('advances active rivals by survival time on a shared rail', () => {
     const adapter = new SimulatedRaceAdapter()
     adapter.start(DEFAULT_DURATION_MS)
 
     const [, maya, eli, jo] = adapter.update(DEFAULT_DURATION_MS / 2, 0)
 
-    expect(maya.progress).toBeCloseTo(0.478671, 6)
-    expect(eli.progress).toBeCloseTo(0.421797, 6)
-    expect(jo.progress).toBeCloseTo(0.394560, 6)
+    expect(maya.progress).toBeCloseTo(2 / 9, 6)
+    expect(eli.progress).toBeCloseTo(2 / 9, 6)
+    expect(jo.progress).toBeCloseTo(2 / 9, 6)
+    expect(maya.survivalMs).toBe(DEFAULT_DURATION_MS / 2)
   })
 
-  it('ranks the rivals by their base pace once the surge is spent', () => {
+  it('freezes rivals at distinct elimination times so the longest survivor wins', () => {
     const adapter = new SimulatedRaceAdapter()
     adapter.start(DEFAULT_DURATION_MS)
 
-    const [, maya, eli, jo] = adapter.update(DEFAULT_DURATION_MS * 0.9, 0)
+    const [, maya, eli, jo] = adapter.update(DEFAULT_DURATION_MS * 1.8, 0)
 
-    expect(maya.progress).toBeGreaterThan(eli.progress)
-    expect(eli.progress).toBeGreaterThan(jo.progress)
+    expect(maya.eliminated).toBe(false)
+    expect(eli.eliminated).toBe(true)
+    expect(jo.eliminated).toBe(true)
+    expect(maya.survivalMs).toBeGreaterThan(eli.survivalMs)
+    expect(eli.survivalMs).toBeGreaterThan(jo.survivalMs)
   })
 
   it('scales the rails to the duration handed to start()', () => {

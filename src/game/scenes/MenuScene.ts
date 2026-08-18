@@ -111,11 +111,16 @@ export class MenuScene extends Phaser.Scene {
     )
     this.renderSelection()
 
-    this.createModeButton(this.layout.modeButtons[0], 'SOLO RUN', 'Practice your line', 'solo')
+    this.createModeButton(
+      this.layout.modeButtons[0],
+      'SOLO SURVIVAL',
+      'Last as long as you can',
+      'solo',
+    )
     this.createModeButton(
       this.layout.modeButtons[1],
-      'RACE PREVIEW',
-      '3 simulated rivals',
+      'SURVIVAL RACE',
+      'Outlast 3 simulated rivals',
       'multiplayer-preview',
     )
     this.createVoiceSelector()
