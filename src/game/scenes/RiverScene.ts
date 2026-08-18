@@ -10,13 +10,13 @@ import { getLevel } from '../levels'
 import { SimulatedRaceAdapter } from '../race/SimulatedRaceAdapter'
 import { SoloRaceAdapter } from '../race/SoloRaceAdapter'
 import type { RaceAdapter } from '../race/RaceAdapter'
-import { rankRacers } from '../race/rankRacers'
-import { placeOfLocal, runOutcome } from '../run/runOutcome'
 import { spreadRailLabels } from '../race/railLabels'
+import { rankRacers } from '../race/rankRacers'
 import { RhythmEngine } from '../rhythm/RhythmEngine'
+import { callBanner, obstacleLabel, type BannerTone } from '../run/callBanner'
+import { placeOfLocal, runOutcome } from '../run/runOutcome'
 import {
   SurvivalEngine,
-  type ObstacleKind,
   type SurvivalTransition,
 } from '../survival/SurvivalEngine'
 import type {
@@ -53,13 +53,6 @@ const RATING_COLOR: Record<StrokeRating, string> = {
 
 const LOOK_AHEAD_MS = 2_200
 const SCHEDULE_AHEAD_MS = LOOK_AHEAD_MS + 2_000
-
-const OBSTACLE_LABEL: Record<ObstacleKind, string> = {
-  rock: 'ROCK',
-  strainer: 'STRAINER',
-  current: 'CROSS-CURRENT',
-  rapid: 'WAVE TRAIN',
-}
 
 const clamp = (value: number): number => Math.max(0, Math.min(1, value))
 
@@ -714,34 +707,30 @@ export class RiverScene extends Phaser.Scene {
     const leadTime = 1_500
     const event = this.survival.getCurrentCall(elapsed, leadTime)
 
-    if (!event) {
-      if (elapsed > 0) {
-        const state = this.survival.getSnapshot(elapsed).state
-        this.callText
-          .setText(state === 'overboard' ? 'FIND THE RAFT' : 'READ THE WATER')
-          .setColor(TEXT_COLORS.cream)
-          .setFontSize(Math.round(this.layout.type.hero * 0.6))
-        this.callSubtext.setText(
-          state === 'overboard' ? 'THE CURRENT IS PULLING YOU AWAY' : 'THE RAPIDS KEEP BUILDING',
-        )
-      }
-      return
-    }
+    if (!event && elapsed <= 0) return
 
-    const { cue } = event
-    const directionLabel = cue.direction === 'forward' ? 'FORWARD' : 'BACKWARDS'
-    const state = this.survival.getSnapshot(elapsed).state
-    this.callText
-      .setText(`${directionLabel} ${cue.strokes}!`)
-      .setColor(cue.direction === 'forward' ? this.level.accent : TEXT_COLORS.waterLight)
-      .setFontSize(
-        cue.direction === 'forward' ? this.layout.type.hero : Math.round(this.layout.type.hero * 0.86),
-      )
-    this.callSubtext.setText(
-      state === 'overboard'
-        ? `SWIM TO THE RAFT  /  ${cue.strokes} ${cue.strokes === 1 ? 'STROKE' : 'STROKES'}`
-        : `${OBSTACLE_LABEL[event.obstacle]} AHEAD  /  ${directionLabel} ONLY`,
+    const { state } = this.survival.getSnapshot(elapsed)
+    const cue = event?.cue
+    const banner = callBanner(
+      state,
+      event && cue
+        ? { direction: cue.direction, strokes: cue.strokes, obstacle: event.obstacle }
+        : undefined,
     )
+    const { hero } = this.layout.type
+    // The banner supplies the words; the colours and sizes stay here, where the
+    // theme and the selected level's accent live.
+    const emphasis: Record<BannerTone, { color: string; size: number }> = {
+      waiting: { color: TEXT_COLORS.cream, size: Math.round(hero * 0.6) },
+      forward: { color: this.level.accent, size: hero },
+      backward: { color: TEXT_COLORS.waterLight, size: Math.round(hero * 0.86) },
+    }
+    const { color, size } = emphasis[banner.tone]
+
+    this.callText.setText(banner.headline).setColor(color).setFontSize(size)
+    this.callSubtext.setText(banner.subtext)
+
+    if (!event || !cue) return
 
     if (event.cueIndex !== this.lastCueIndex) {
       this.lastCueIndex = event.cueIndex
@@ -827,7 +816,7 @@ export class RiverScene extends Phaser.Scene {
   }
 
   private handleSurvivalTransition(transition: SurvivalTransition): void {
-    const obstacle = OBSTACLE_LABEL[transition.event.obstacle]
+    const obstacle = obstacleLabel(transition.event.obstacle)
 
     if (transition.type === 'impact') {
       this.showFeedback(`${obstacle} HIT`, 'wrong')
