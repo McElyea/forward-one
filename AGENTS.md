@@ -85,7 +85,7 @@ Class-field initializers therefore run exactly once, at construction — never a
 second visit.
 
 This means any mutable scene state must be reset in `init()`, not by a field initializer.
-`RiverScene.init()` (`src/game/scenes/RiverScene.ts:119`) is the reference: it reassigns
+`RiverScene.init()` (`src/game/scenes/RiverScene.ts:120`) is the reference: it reassigns
 every field it owns on entry, down to the `layoutAppliers` array of placement closures.
 `MenuScene.init()` (`src/game/scenes/MenuScene.ts:44`) does the same for the put-in screen.
 

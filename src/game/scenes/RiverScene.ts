@@ -26,6 +26,7 @@ import type {
   StrokeRating,
 } from '../types'
 import { riverLayout, type RiverLayout } from '../ui/layout'
+import { formatRunClock } from '../ui/runClock'
 import {
   bodyStyle,
   COLORS,
@@ -263,7 +264,7 @@ export class RiverScene extends Phaser.Scene {
         headingStyle(type.label, TEXT_COLORS.muted),
       )
       .setDepth(11)
-    this.timeText = this.add.text(0, 0, '00:00', headingStyle(type.title)).setDepth(11)
+    this.timeText = this.add.text(0, 0, formatRunClock(0), headingStyle(type.title)).setDepth(11)
     this.statsText = this.add
       .text(0, 0, '100%  /  0', bodyStyle(type.label, TEXT_COLORS.muted))
       .setDepth(11)
@@ -272,19 +273,26 @@ export class RiverScene extends Phaser.Scene {
     this.onLayout((layout) => {
       const mid = layout.topBar.height / 2
       const g = layout.gutter
-      brand.setPosition(g, mid).setOrigin(0, 0.5).setFontSize(layout.type.heading)
-      classLabel
-        .setPosition(g + brand.width + g * 0.7, mid)
+      // A phone in portrait has no width for the wordmark or the mode caption
+      // next to a clock that now reads M:SS.CC; the class is what identifies
+      // the run, so it takes the left edge alone.
+      const wide = layout.mode === 'landscape'
+      brand
+        .setPosition(g, mid)
         .setOrigin(0, 0.5)
         .setFontSize(layout.type.heading)
+        .setVisible(wide)
+      const classX = wide ? g + brand.width + g * 0.7 : g
+      classLabel.setPosition(classX, mid).setOrigin(0, 0.5).setFontSize(layout.type.heading)
       modeLabel
-        .setPosition(g + brand.width + classLabel.width + g * 1.4, mid)
+        .setPosition(classX + classLabel.width + g * 1.4, mid)
         .setOrigin(0, 0.5)
         .setFontSize(layout.type.label)
-        // A phone in portrait has no width for the mode caption.
-        .setVisible(layout.mode === 'landscape')
+        .setVisible(wide)
       this.timeText
-        .setPosition(layout.statsText.x - layout.type.body * 4.2, mid)
+        // Right-aligned clear of the stats readout, with room for its widest
+        // form ("100%  /  99999") rather than for the string showing now.
+        .setPosition(layout.statsText.x - layout.type.label * 7.5, mid)
         .setOrigin(1, 0.5)
         .setFontSize(layout.type.title)
       this.statsText.setPosition(layout.statsText.x, mid).setFontSize(layout.type.label)
@@ -761,9 +769,7 @@ export class RiverScene extends Phaser.Scene {
       this.callSubtext.setText('THE CLOCK STARTS TOGETHER')
     }
 
-    const seconds = Math.floor(elapsed / 1000)
-    const centiseconds = Math.floor((elapsed % 1000) / 10)
-    this.timeText.setText(`${String(seconds).padStart(2, '0')}:${String(centiseconds).padStart(2, '0')}`)
+    this.timeText.setText(formatRunClock(elapsed))
     this.statsText.setText(`${this.rhythm.getAccuracy()}%  /  ${this.totalPoints}`)
 
     const survival = this.survival.getSnapshot(elapsed)
@@ -882,7 +888,7 @@ export class RiverScene extends Phaser.Scene {
       .text(
         0,
         0,
-        `${(elapsed / 1000).toFixed(2)} SEC   /   ${this.rhythm.getAccuracy()}% ACCURACY`,
+        `${formatRunClock(elapsed)}   /   ${this.rhythm.getAccuracy()}% ACCURACY`,
         headingStyle(this.layout.type.heading, TEXT_COLORS.cream),
       )
       .setOrigin(0.5)

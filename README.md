@@ -62,6 +62,7 @@ src/game/
   scenes/RiverScene.ts
   ui/layout.ts              viewport-driven regions and type scale
   ui/fontLoading.ts         gates boot until the bundled faces are usable
+  ui/runClock.ts            the M:SS.CC run clock, shared by the HUD and the summary
 
 src/assets/fonts/           self-hosted Barlow Condensed and Inter (woff2, OFL 1.1)
 ```
