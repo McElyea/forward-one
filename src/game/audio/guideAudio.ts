@@ -45,18 +45,64 @@ export function guideAudioKey(
   return `guide-${voiceId}-${direction}-${strokes}`
 }
 
-export function loadGuideAudio(scene: Phaser.Scene): void {
-  for (const voice of GUIDE_VOICES) {
-    for (const direction of ['forward', 'backward'] as const) {
-      for (const strokes of [1, 2, 3, 4] as const) {
-        const key = guideAudioKey(voice.id, direction, strokes)
-        if (scene.cache.audio.exists(key)) continue
+/** A clip the loader can queue: the cache key it lands under, and where it lives. */
+export type GuideAudioClip = {
+  key: string
+  url: string
+}
 
-        scene.load.audio(
-          key,
-          `${import.meta.env.BASE_URL}audio/guide/${voice.id}/${direction}-${strokes}.wav`,
-        )
-      }
+export function guideAudioClip(
+  voiceId: GuideVoiceId,
+  direction: PaddleDirection,
+  strokes: GuideCallNumber,
+): GuideAudioClip {
+  return {
+    key: guideAudioKey(voiceId, direction, strokes),
+    url: `${import.meta.env.BASE_URL}audio/guide/${voiceId}/${direction}-${strokes}.wav`,
+  }
+}
+
+/** Every call one voice can make during a run: two directions x four stroke counts. */
+export function guideVoiceClips(voiceId: GuideVoiceId): GuideAudioClip[] {
+  const clips: GuideAudioClip[] = []
+  for (const direction of ['forward', 'backward'] as const) {
+    for (const strokes of [1, 2, 3, 4] as const) {
+      clips.push(guideAudioClip(voiceId, direction, strokes))
     }
   }
+  return clips
+}
+
+/** The one clip the put-in screen plays when a voice is chosen. */
+export function guideVoicePreviewClip(voiceId: GuideVoiceId): GuideAudioClip {
+  return guideAudioClip(voiceId, 'forward', 4)
+}
+
+/** One preview per bundled voice — everything the put-in screen can play. */
+export function guideVoicePreviewClips(): GuideAudioClip[] {
+  return GUIDE_VOICES.map((voice) => guideVoicePreviewClip(voice.id))
+}
+
+function queueClips(scene: Phaser.Scene, clips: GuideAudioClip[]): void {
+  for (const clip of clips) {
+    if (scene.cache.audio.exists(clip.key)) continue
+
+    scene.load.audio(clip.key, clip.url)
+  }
+}
+
+/**
+ * Queue the calls for one voice. A run only ever speaks in the voice the player
+ * chose, so loading all four costs 3.4 MB that is never played.
+ */
+export function loadGuideAudio(
+  scene: Phaser.Scene,
+  voiceId: GuideVoiceId = getSelectedGuideVoiceId(),
+): void {
+  queueClips(scene, guideVoiceClips(voiceId))
+}
+
+/** Queue the put-in screen's previews: one clip per voice rather than all eight. */
+export function loadGuideVoicePreviews(scene: Phaser.Scene): void {
+  queueClips(scene, guideVoicePreviewClips())
 }

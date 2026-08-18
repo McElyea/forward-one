@@ -845,9 +845,13 @@ export class RiverScene extends Phaser.Scene {
 
   private speakCall(direction: PaddleDirection, strokes: number): void {
     if (strokes < 1 || strokes > 4) return
+    const key = guideAudioKey(this.guideVoiceId, direction, strokes as GuideCallNumber)
+    // The clip is preloaded, but a miss must stay silent rather than throw mid-run.
+    if (!this.cache.audio.exists(key)) return
+
     this.activeGuideCall?.stop()
     this.activeGuideCall?.destroy()
-    const guideCall = this.sound.add(guideAudioKey(this.guideVoiceId, direction, strokes as GuideCallNumber), {
+    const guideCall = this.sound.add(key, {
       volume: 1,
     })
     this.activeGuideCall = guideCall
