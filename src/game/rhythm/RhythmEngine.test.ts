@@ -9,6 +9,14 @@ describe('RhythmEngine', () => {
     expect(rhythm.targets.every((target) => target.direction === 'forward')).toBe(true)
   })
 
+  it('appends generated calls without reusing cue or target ids', () => {
+    const rhythm = new RhythmEngine([{ at: 1_000, direction: 'forward', strokes: 1 }])
+
+    expect(rhythm.addCue({ at: 2_000, direction: 'backward', strokes: 2 })).toBe(1)
+    expect(rhythm.targets.map((target) => target.id)).toEqual(['0-0', '1-0', '1-1'])
+    expect(rhythm.targets.map((target) => target.targetTime)).toEqual([1_000, 2_000, 2_560])
+  })
+
   it('grades strokes by their timing offset', () => {
     const rhythm = new RhythmEngine([{ at: 1_000, direction: 'forward', strokes: 2 }])
 

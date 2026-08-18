@@ -8,13 +8,19 @@ export class SoloRaceAdapter implements RaceAdapter {
 
   recordStroke(_judgment: StrokeJudgment): void {}
 
-  update(_elapsedMs: number, localProgress: number): RacerSnapshot[] {
+  update(
+    elapsedMs: number,
+    localProgress: number,
+    localEliminated = false,
+  ): RacerSnapshot[] {
     return [
       {
         id: 'local',
         name: 'YOU',
         color: 0xffc857,
         progress: localProgress,
+        survivalMs: elapsedMs,
+        eliminated: localEliminated,
         isLocal: true,
         connected: true,
       },

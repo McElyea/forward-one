@@ -20,20 +20,29 @@ const SCORE_BY_RATING: Record<StrokeRating, number> = {
 }
 
 export class RhythmEngine {
-  readonly targets: StrokeTarget[]
+  readonly targets: StrokeTarget[] = []
+
+  private nextCueIndex = 0
 
   constructor(cues: PaddleCue[]) {
-    this.targets = cues.flatMap((cue, cueIndex) => {
-      const interval = cue.interval ?? 560
-      return Array.from({ length: cue.strokes }, (_, strokeIndex) => ({
-        id: `${cueIndex}-${strokeIndex}`,
-        cueIndex,
-        strokeIndex,
-        direction: cue.direction,
-        targetTime: cue.at + strokeIndex * interval,
-        status: 'pending' as const,
-      }))
-    })
+    for (const cue of cues) this.addCue(cue)
+  }
+
+  addCue(cue: PaddleCue): number {
+    const cueIndex = this.nextCueIndex
+    const interval = cue.interval ?? 560
+    const targets = Array.from({ length: cue.strokes }, (_, strokeIndex) => ({
+      id: `${cueIndex}-${strokeIndex}`,
+      cueIndex,
+      strokeIndex,
+      direction: cue.direction,
+      targetTime: cue.at + strokeIndex * interval,
+      status: 'pending' as const,
+    }))
+
+    this.targets.push(...targets)
+    this.nextCueIndex += 1
+    return cueIndex
   }
 
   judge(inputTime: number, direction: PaddleDirection): StrokeJudgment {

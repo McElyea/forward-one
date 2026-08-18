@@ -37,23 +37,23 @@ describe('LEVELS', () => {
     }
   })
 
-  it('starts every cue before the level is over', () => {
+  it('keeps every pattern cue inside the survival benchmark window', () => {
     for (const level of LEVELS) {
       for (const cue of level.cues) {
-        expect(cue.at).toBeLessThan(level.durationMs)
+        expect(cue.at).toBeLessThan(level.survivalBenchmarkMs)
       }
     }
   })
 
-  it('lands every authored stroke before the run times out', () => {
-    // A run now ends at durationMs whatever the player scored, so a cue whose
-    // last stroke fell after that would be authored content nobody can paddle.
+  it('lands every pattern stroke inside the survival benchmark window', () => {
+    // The benchmark scales simulated rival eliminations. Keeping the whole
+    // authored pattern inside it makes every selected class start coherently.
     for (const level of LEVELS) {
       for (const cue of level.cues) {
         const interval = cue.interval ?? 560
         const lastStrokeAt = cue.at + (cue.strokes - 1) * interval
 
-        expect(lastStrokeAt).toBeLessThan(level.durationMs)
+        expect(lastStrokeAt).toBeLessThan(level.survivalBenchmarkMs)
       }
     }
   })

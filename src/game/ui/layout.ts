@@ -248,6 +248,7 @@ export interface RiverLayout {
   callSub: Point
   feedback: Point
   raft: Point
+  survivalStatus: Point
   timeText: Point
   statsText: Point
 }
@@ -323,6 +324,7 @@ export function riverLayout(width: number, height: number): RiverLayout {
       },
       feedback: { x: round(river.x + river.width / 2), y: round(river.y + river.height * 0.56) },
       raft: { x: round(river.x + river.width / 2), y: round(river.y + river.height * 0.42) },
+      survivalStatus: { x: round(river.x + g), y: round(river.y + g * 0.7) },
       timeText: { x: round(g), y: round(topBarHeight * 0.5) },
       statsText: { x: round(width - g), y: round(topBarHeight * 0.5) },
     }
@@ -420,6 +422,7 @@ export function riverLayout(width: number, height: number): RiverLayout {
     },
     feedback: { x: round(river.x + river.width / 2), y: round(river.y + river.height * 0.72) },
     raft: { x: round(river.x + river.width / 2), y: round(river.y + river.height * 0.55) },
+    survivalStatus: { x: round(river.x + g), y: round(river.y + g * 0.7) },
     timeText: { x: round(g), y: round(topBarHeight * 0.5) },
     statsText: { x: round(width - g), y: round(topBarHeight * 0.5) },
   }

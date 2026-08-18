@@ -6,8 +6,12 @@ import type { RacerSnapshot, StrokeJudgment } from '../types'
  */
 export interface RaceAdapter {
   readonly kind: 'solo' | 'multiplayer-preview'
-  start(durationMs: number): void
+  start(survivalBaselineMs: number): void
   recordStroke(judgment: StrokeJudgment): void
-  update(elapsedMs: number, localProgress: number): RacerSnapshot[]
+  update(
+    elapsedMs: number,
+    localProgress: number,
+    localEliminated?: boolean,
+  ): RacerSnapshot[]
   destroy(): void
 }
