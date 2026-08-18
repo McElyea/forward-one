@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Agent/harness scratch state. Nothing here belongs to the project, and a
+# blanket `git add` would otherwise commit it.
+.claude/

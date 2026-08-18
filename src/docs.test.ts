@@ -313,6 +313,45 @@ describe('the container image stays in step with the project it builds', () => {
     ).toBe(listening)
   })
 
+  it('exposes and health-checks the port nginx listens on', () => {
+    const listening = soleMatch('the nginx listen directive', /listen\s+(\d+)/, nginxConfig)
+    const exposed = soleMatch('the Dockerfile EXPOSE line', /^EXPOSE (\d+)/m, dockerfile)
+    const probed = soleMatch(
+      'the Dockerfile HEALTHCHECK command',
+      /CMD wget[^\n]*http:\/\/127\.0\.0\.1:(\d+)\//,
+      dockerfile,
+    )
+
+    expect(
+      exposed,
+      `the image exposes ${exposed} but nginx listens on ${listening}`,
+    ).toBe(listening)
+    expect(
+      probed,
+      `the healthcheck probes ${probed} but nginx listens on ${listening}`,
+    ).toBe(listening)
+  })
+
+  it('health-checks a path nginx actually answers', () => {
+    const path = soleMatch(
+      'the Dockerfile HEALTHCHECK path',
+      /CMD wget[^\n]*http:\/\/127\.0\.0\.1:\d+(\/\S*)/,
+      dockerfile,
+    )
+
+    // An exact-match block, not a substring: `location = /healthz` contains
+    // `location = /health`, so `toContain` would pass on a healthcheck that
+    // fetches a path nginx never answers.
+    const exactBlock = new RegExp(
+      `location\\s*=\\s*${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{`,
+    )
+
+    expect(
+      exactBlock.test(nginxConfig),
+      `the healthcheck fetches ${path}, which nginx has no location block for`,
+    ).toBe(true)
+  })
+
   it('builds on the Node major that engines declares', () => {
     const declared = soleMatch('package.json engines.node', /^>=(\d+)/, manifest.engines.node)
     const image = soleMatch('the Dockerfile build stage', /^FROM node:(\d+)/m, dockerfile)
