@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  LINE_HEIGHT,
   MIN_TOUCH_PX,
   gutter,
   layoutMode,
+  levelCardText,
   menuLayout,
   riverLayout,
   typography,
@@ -90,6 +92,66 @@ describe('menuLayout', () => {
       expect(within(rect, width, height)).toBe(true)
     }
     expect(layout.hint.y).toBeLessThanOrEqual(height)
+  })
+
+  it.each(VIEWPORTS)('keeps a level card\'s three lines clear of each other on $name', ({
+    width,
+    height,
+  }) => {
+    const layout = menuLayout(width, height, LEVEL_COUNT, VOICE_COUNT)
+
+    for (const card of layout.cards) {
+      const text = levelCardText(card)
+      const bottomOf = (line: { y: number; size: number }): number =>
+        line.y + line.size * LINE_HEIGHT
+
+      // The numeral used to be sized from the whole card while both insets grew
+      // with card width, so on a wide portrait tablet it was drawn through the
+      // level name.
+      expect(
+        bottomOf(text.number),
+        'the rapid-class numeral runs into the level name',
+      ).toBeLessThanOrEqual(text.name.y)
+      expect(
+        bottomOf(text.classLabel),
+        'the CLASS label runs into the numeral',
+      ).toBeLessThanOrEqual(text.number.y)
+      expect(bottomOf(text.name), 'the level name falls off the card').toBeLessThanOrEqual(
+        card.height,
+      )
+      expect(text.classLabel.y, 'the CLASS label sits above the card').toBeGreaterThan(0)
+      expect(text.number.x, 'the numeral sits outside the card').toBeGreaterThan(0)
+    }
+  })
+
+  it.each(VIEWPORTS)('keeps the numeral the dominant line on a card on $name', ({
+    width,
+    height,
+  }) => {
+    const layout = menuLayout(width, height, LEVEL_COUNT, VOICE_COUNT)
+
+    for (const card of layout.cards) {
+      const text = levelCardText(card)
+
+      expect(text.name.size).toBe(text.classLabel.size)
+      // Shrinking to fit must still leave the numeral reading as the headline
+      // of the card rather than a third label.
+      expect(
+        text.number.size,
+        'the numeral no longer dominates the card',
+      ).toBeGreaterThanOrEqual(text.name.size * 1.5)
+    }
+  })
+
+  it('shrinks the numeral rather than the card when the card is wide and short', () => {
+    const tall = levelCardText({ x: 0, y: 0, width: 173, height: 124 })
+    const wide = levelCardText({ x: 0, y: 0, width: 470, height: 124 })
+
+    // Same height, so the same numeral: the horizontal inset no longer steals
+    // vertical room.
+    expect(wide.number.size).toBe(tall.number.size)
+    expect(wide.number.y).toBe(tall.number.y)
+    expect(wide.classLabel.x).toBeGreaterThan(tall.classLabel.x)
   })
 
   it('produces one card per level, and stacks them into two columns in portrait', () => {
