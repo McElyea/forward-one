@@ -2,17 +2,24 @@ import { describe, expect, it } from 'vitest'
 import agentsGuide from '../AGENTS.md?raw'
 import ciWorkflow from '../.github/workflows/ci.yml?raw'
 import dockerfile from '../Dockerfile?raw'
+import nginxConfig from '../docker/nginx.conf?raw'
 import manifestSource from '../package.json?raw'
 import readme from '../README.md?raw'
 
 /**
- * `README.md`, `package.json`, and `ci.yml` describe the same project to three
- * different audiences, and nothing else in the suite reads any of them. Three
- * disagreements between them had to be corrected by hand once already; these
- * assertions turn the next one into a test failure rather than into a
- * contributor running a command that no longer exists.
+ * `README.md`, `AGENTS.md`, `package.json`, `ci.yml`, the `Dockerfile` and the
+ * nginx config describe the same project to different audiences, and nothing
+ * else in the suite reads any of them. Three disagreements between them had to
+ * be corrected by hand once already; these assertions turn the next one into a
+ * test failure rather than into a contributor running a command that no longer
+ * exists — or trusting a rule the code stopped enforcing.
  *
- * The three files arrive as `?raw` text rather than through `node:fs` so that
+ * What the README says about *behaviour* is checked the same way: the numbers
+ * it quotes for ejection, recovery and being swept away, the keys it offers,
+ * and the guide voices it lists are all read back out of the source that
+ * decides them, so prose and code cannot drift apart quietly.
+ *
+ * Every file arrives as `?raw` text rather than through `node:fs` so that
  * nothing here needs a path resolved at runtime or the Node type definitions
  * that `tsconfig.json` deliberately keeps out of `types`.
  */
@@ -128,7 +135,184 @@ describe('the README stays in step with the project it documents', () => {
  * project no longer claims to support — and the failure, if any, surfaces at
  * deploy time rather than here.
  */
+/** The number a README sentence spells out, e.g. "Three failed" -> 3. */
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+}
+
+const spelledNumber = (label: string, pattern: RegExp): number => {
+  const word = soleMatch(label, pattern, readme).toLowerCase()
+  const value = NUMBER_WORDS[word]
+  if (value === undefined) {
+    throw new Error(`${label} reads "${word}", which is not a number this test knows`)
+  }
+  return value
+}
+
+/** A `const NAME = 12` in one of the globbed sources. */
+const sourceConstant = (path: string, name: string): number => {
+  const text = sourceText[path]
+  if (text === undefined) {
+    throw new Error(`${path} is no longer where this test expects it`)
+  }
+  return Number(soleMatch(`${name} in ${path}`, new RegExp(`const ${name} = (\\d+)`), text))
+}
+
+describe('the README stays in step with the rules the code enforces', () => {
+  const survival = 'src/game/survival/SurvivalEngine.ts'
+
+  it('states the number of missed calls that throws the player overboard', () => {
+    const documented = spelledNumber(
+      'the README ejection sentence',
+      /(\w+) failed obstacle calls throw the player overboard/,
+    )
+
+    expect(
+      documented,
+      'the README and MAX_STABILITY disagree on how much punishment a raft takes',
+    ).toBe(sourceConstant(survival, 'MAX_STABILITY'))
+  })
+
+  it('states the number of calls that get a swimmer back aboard', () => {
+    const documented = spelledNumber(
+      'the README recovery sentence',
+      /land (\w+) calls to regain the raft/,
+    )
+
+    expect(
+      documented,
+      'the README and RECOVERY_CALLS disagree on what it takes to get back aboard',
+    ).toBe(sourceConstant(survival, 'RECOVERY_CALLS'))
+  })
+
+  it('states the number of missed recovery calls that ends the run', () => {
+    const documented = spelledNumber(
+      'the README swept-away sentence',
+      /miss (\w+) consecutive recovery calls and the run ends/,
+    )
+
+    expect(
+      documented,
+      'the README and MAX_DRIFT disagree on when a swimmer is swept away',
+    ).toBe(sourceConstant(survival, 'MAX_DRIFT'))
+  })
+
+  it('names the keys the river scene actually binds', () => {
+    const river = sourceText['src/game/scenes/RiverScene.ts']
+    if (river === undefined) throw new Error('RiverScene is no longer where this test expects it')
+
+    const bound = new Map<string, string>()
+    for (const binding of river.matchAll(/keyboard\?\.on\('keydown-([A-Z]+)', this\.(\w+)/g)) {
+      bound.set(binding[1], binding[2])
+    }
+
+    // The README writes keys as a player sees them; Phaser names them its way.
+    const KEY_NAMES: Record<string, string> = {
+      Space: 'SPACE',
+      F: 'F',
+      '\u2191': 'UP',
+      B: 'B',
+      '\u2193': 'DOWN',
+    }
+    const offered = (list: string): string[] =>
+      list
+        .split(/,|\bor\b/)
+        .map((key) => key.trim())
+        .filter((key) => key !== '')
+        .map((key) => {
+          const named = KEY_NAMES[key]
+          if (named === undefined) {
+            throw new Error(`the README offers a "${key}" key this test cannot name`)
+          }
+          return named
+        })
+
+    const sentence = /Use ([^.]+?) for forward strokes and ([^.]+?) for backwards strokes/.exec(
+      readme,
+    )
+    if (sentence === null) {
+      throw new Error('the README controls sentence could not be read — its format has changed')
+    }
+
+    const boundTo = (handler: string): string[] =>
+      [...bound.entries()]
+        .filter(([, target]) => target === handler)
+        .map(([key]) => key)
+        .sort()
+
+    expect(
+      offered(sentence[1]).sort(),
+      'the README and RiverScene disagree about the forward-stroke keys',
+    ).toEqual(boundTo('onForwardPaddle'))
+    expect(
+      offered(sentence[2]).sort(),
+      'the README and RiverScene disagree about the backwards-stroke keys',
+    ).toEqual(boundTo('onBackwardPaddle'))
+
+    expect(readme, 'the README stopped saying how to leave a run').toContain(
+      'Escape returns to the menu',
+    )
+    expect(bound.get('ESC'), 'Escape no longer returns to the menu').toBe('returnToMenu')
+  })
+})
+
+describe('the README stays in step with the guide voices that ship', () => {
+  const guideAudio = sourceText['src/game/audio/guideAudio.ts']
+
+  it('names every bundled voice', () => {
+    if (guideAudio === undefined) throw new Error('guideAudio.ts moved')
+    const shipped = [...guideAudio.matchAll(/name: '(\w+)'/g)].map((voice) => voice[1])
+
+    expect(shipped.length, 'no voice names could be read from guideAudio.ts').toBeGreaterThan(0)
+    for (const name of shipped) {
+      expect(readme, `the README does not mention the ${name} guide voice`).toContain(name)
+    }
+  })
+
+  it('names the same default the code falls back to', () => {
+    if (guideAudio === undefined) throw new Error('guideAudio.ts moved')
+    const defaultId = soleMatch(
+      'DEFAULT_GUIDE_VOICE_ID',
+      /DEFAULT_GUIDE_VOICE_ID: GuideVoiceId = '(\w+)'/,
+      guideAudio,
+    )
+    const defaultName = soleMatch(
+      `the ${defaultId} entry in GUIDE_VOICES`,
+      new RegExp(`id: '${defaultId}', name: '(\\w+)'`),
+      guideAudio,
+    )
+    const documented = soleMatch(
+      'the README default-voice sentence',
+      /with (\w+) as the default/,
+      readme,
+    )
+
+    expect(
+      documented,
+      `the README calls ${documented} the default guide voice, the code falls back to ${defaultName}`,
+    ).toBe(defaultName)
+  })
+})
+
 describe('the container image stays in step with the project it builds', () => {
+  it('serves on the port the README tells a reader to open', () => {
+    const listening = soleMatch('the nginx listen directive', /listen\s+(\d+)/, nginxConfig)
+    const documented = soleMatch(
+      'the README container port sentence',
+      /The server listens on \*\*(\d+)\*\*/,
+      readme,
+    )
+
+    expect(
+      documented,
+      `the README sends a reader to port ${documented} but nginx listens on ${listening}`,
+    ).toBe(listening)
+  })
+
   it('builds on the Node major that engines declares', () => {
     const declared = soleMatch('package.json engines.node', /^>=(\d+)/, manifest.engines.node)
     const image = soleMatch('the Dockerfile build stage', /^FROM node:(\d+)/m, dockerfile)
