@@ -11,6 +11,7 @@ import { SimulatedRaceAdapter } from '../race/SimulatedRaceAdapter'
 import { SoloRaceAdapter } from '../race/SoloRaceAdapter'
 import type { RaceAdapter } from '../race/RaceAdapter'
 import { rankRacers } from '../race/rankRacers'
+import { spreadRailLabels } from '../race/railLabels'
 import { RhythmEngine } from '../rhythm/RhythmEngine'
 import {
   SurvivalEngine,
@@ -653,16 +654,22 @@ export class RiverScene extends Phaser.Scene {
 
     // Every racer starts at progress 0, so without this every name lands on the
     // same pixel and the rail reads as one smudge for the first few seconds.
-    // Dots stay truthful; only the labels are nudged apart.
-    const minGap = type.label * (vertical ? 1.15 : 3.2)
-    for (let i = 1; i < placed.length; i += 1) {
-      const previous = placed[i - 1].label
-      const current = placed[i]
-      // Sorted by progress descending, so `along` runs one way down the axis:
-      // downward in y when vertical, leftward in x when horizontal.
-      current.label = vertical
-        ? Math.max(current.label, previous + minGap)
-        : Math.min(current.label, previous - minGap)
+    // Dots stay truthful; only the labels are nudged apart — and only as far as
+    // the rail goes, or the last name in a four-boat race is drawn off it.
+    // Sorted by progress descending, so the nudge runs one way down the axis:
+    // downward in y when vertical, leftward in x when horizontal.
+    const spread = spreadRailLabels(
+      placed.map((entry) => entry.label),
+      {
+        minGap: type.label * (vertical ? 1.15 : 3.2),
+        // The track's own ends: the same inset that keeps the end caps clear.
+        min: Math.min(axisFrom, axisTo),
+        max: Math.max(axisFrom, axisTo),
+        ascending: vertical,
+      },
+    )
+    for (const [index, entry] of placed.entries()) {
+      entry.label = spread[index]
     }
 
     for (const { racer, radius, size, dot, label: labelAlong } of placed) {
