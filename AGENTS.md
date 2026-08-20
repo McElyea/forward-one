@@ -48,8 +48,8 @@ a change that can be covered by a test and one that cannot (see Testing).
 
 **Multiplayer goes behind `RaceAdapter`.** `src/game/race/RaceAdapter.ts` is the
 solo/multiplayer boundary, and `README.md` states the intent: a hosted backend arrives as a
-new adapter implementation *without* `RiverScene` changing. `SoloRaceAdapter` and
-`SimulatedRaceAdapter` are the two existing implementations. If a change to race or
+new adapter implementation *without* `RiverScene` changing. `SoloRaceAdapter`,
+`SimulatedRaceAdapter`, and `SupabaseRaceAdapter` are the existing implementations. If a change to race or
 progress behaviour requires editing `RiverScene` to accommodate a specific backend, the
 change is in the wrong place.
 
@@ -57,7 +57,7 @@ change is in the wrong place.
 `bodyStyle()` — not from inline literals.
 
 **Nothing is positioned with a literal coordinate. Ask `ui/layout.ts` instead.**
-The canvas is sized to the viewport (`Phaser.Scale.RESIZE`, `src/game/startGame.ts:16`), so
+The canvas is sized to the viewport (`Phaser.Scale.RESIZE`, `src/game/startGame.ts:17`), so
 **one game unit is one CSS pixel** — a 44-unit button really is 44px under the player's
 thumb. `src/game/ui/layout.ts` turns `(width, height)` into named regions (`river`, `rail`,
 `rhythmLane`, `controls`, …) and a type scale, with separate portrait and landscape
@@ -85,9 +85,9 @@ Class-field initializers therefore run exactly once, at construction — never a
 second visit.
 
 This means any mutable scene state must be reset in `init()`, not by a field initializer.
-`RiverScene.init()` (`src/game/scenes/RiverScene.ts:115`) is the reference: it reassigns
+`RiverScene.init()` (`src/game/scenes/RiverScene.ts:120`) is the reference: it reassigns
 every field it owns on entry, down to the `layoutAppliers` array of placement closures.
-`MenuScene.init()` (`src/game/scenes/MenuScene.ts:44`) does the same for the put-in screen.
+`MenuScene.init()` (`src/game/scenes/MenuScene.ts:46`) does the same for the put-in screen.
 
 `MenuScene` is also the worked example of what happens without one. It had no `init()` until
 [#11](https://github.com/McElyea/forward-one/pull/11), so `create()` pushed four more level
@@ -109,7 +109,8 @@ in this repo, and `package.json` runs a bare `vitest run` — so vitest's defaul
   points at the import rather than at the real problem.
 - **No globals.** Import everything explicitly: `import { describe, expect, it } from 'vitest'`.
 - **Tests are colocated** with their source as `<Source>.test.ts` —
-  `src/game/rhythm/RhythmEngine.test.ts`, `src/game/audio/guideAudio.test.ts`. There is no
+  `src/game/rhythm/RhythmEngine.test.ts`, `src/game/audio/guideAudio.test.ts`. Multiplayer
+  policy and protocol parsing follow the same pattern under `src/game/multiplayer/`. There is no
   top-level `test/` tree.
 
 The practical consequence: **to make something testable, extract it.** This is why

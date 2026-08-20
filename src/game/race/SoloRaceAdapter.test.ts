@@ -7,6 +7,10 @@ describe('SoloRaceAdapter', () => {
     expect(new SoloRaceAdapter().kind).toBe('solo')
   })
 
+  it('starts after the standard local countdown', () => {
+    expect(new SoloRaceAdapter().start()).toEqual({ countdownMs: 2_400 })
+  })
+
   it('reports the local paddler and nobody else', () => {
     const adapter = new SoloRaceAdapter()
 

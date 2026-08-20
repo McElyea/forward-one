@@ -8,6 +8,12 @@ describe('SimulatedRaceAdapter', () => {
     expect(new SimulatedRaceAdapter().kind).toBe('multiplayer-preview')
   })
 
+  it('starts after the standard local countdown', () => {
+    expect(new SimulatedRaceAdapter().start(DEFAULT_DURATION_MS)).toEqual({
+      countdownMs: 2_400,
+    })
+  })
+
   it('reports the local paddler plus three rivals, in a stable order', () => {
     const adapter = new SimulatedRaceAdapter()
 

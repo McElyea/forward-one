@@ -7,11 +7,12 @@ import {
   type GuideVoiceId,
 } from '../audio/guideAudio'
 import { getLevel } from '../levels'
-import { SimulatedRaceAdapter } from '../race/SimulatedRaceAdapter'
-import { SoloRaceAdapter } from '../race/SoloRaceAdapter'
+import { createRaceAdapter } from '../race/createRaceAdapter'
+import type { HostedRaceSession } from '../race/HostedRaceSession'
 import type { RaceAdapter } from '../race/RaceAdapter'
 import { spreadRailLabels } from '../race/railLabels'
 import { rankRacers } from '../race/rankRacers'
+import { selectRailRacers } from '../race/selectRailRacers'
 import { RhythmEngine } from '../rhythm/RhythmEngine'
 import { callBanner, obstacleLabel, type BannerTone } from '../run/callBanner'
 import { placeOfLocal, runOutcome } from '../run/runOutcome'
@@ -40,6 +41,7 @@ import {
 interface RiverSceneData {
   levelId?: string
   mode?: RaceMode
+  hostedSession?: HostedRaceSession
 }
 
 const RATING_COLOR: Record<StrokeRating, string> = {
@@ -53,6 +55,7 @@ const RATING_COLOR: Record<StrokeRating, string> = {
 
 const LOOK_AHEAD_MS = 2_200
 const SCHEDULE_AHEAD_MS = LOOK_AHEAD_MS + 2_000
+const MAX_VISIBLE_RAIL_RACERS = 8
 
 const clamp = (value: number): number => Math.max(0, Math.min(1, value))
 
@@ -95,6 +98,8 @@ export class RiverScene extends Phaser.Scene {
   private survivalText!: Phaser.GameObjects.Text
   private timeText!: Phaser.GameObjects.Text
   private racers: RacerSnapshot[] = []
+  private raceLabels = new Map<string, Phaser.GameObjects.Text>()
+  private raceOverflowText!: Phaser.GameObjects.Text
   private activeGuideCall?: Phaser.Sound.BaseSound
   private guideVoiceId: GuideVoiceId = getSelectedGuideVoiceId()
   /**
@@ -117,13 +122,14 @@ export class RiverScene extends Phaser.Scene {
     this.mode = data.mode ?? 'solo'
     this.rhythm = new RhythmEngine([])
     this.survival = new SurvivalEngine(this.level)
-    this.race = this.mode === 'solo' ? new SoloRaceAdapter() : new SimulatedRaceAdapter()
+    this.race = createRaceAdapter(this.mode, data.hostedSession)
     this.lastCueIndex = -1
     this.totalPoints = 0
     this.completed = false
     this.returningToMenu = false
     this.guideVoiceId = getSelectedGuideVoiceId()
     this.racers = []
+    this.raceLabels = new Map<string, Phaser.GameObjects.Text>()
     // Scene instances are reused, so this must not carry the last run's closures.
     this.layoutAppliers = []
   }
@@ -158,8 +164,8 @@ export class RiverScene extends Phaser.Scene {
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanUp, this)
 
-    this.startAt = this.time.now + 2_400
-    this.race.start(this.level.survivalBenchmarkMs)
+    const raceStart = this.race.start(this.level.survivalBenchmarkMs)
+    this.startAt = this.time.now + raceStart.countdownMs
   }
 
   update(time: number): void {
@@ -330,21 +336,33 @@ export class RiverScene extends Phaser.Scene {
     const railFinish = this.add
       .text(0, 0, 'LONGEST', headingStyle(type.label, '#688e87'))
       .setDepth(12)
+    this.raceOverflowText = this.add
+      .text(0, 0, '', headingStyle(type.label, TEXT_COLORS.muted))
+      .setDepth(14)
+      .setLetterSpacing(1)
+      .setVisible(false)
     this.onLayout((layout) => {
       const { rail } = layout
       const small = Math.round(layout.type.label * 0.85)
       railTitle.setFontSize(small)
       railStart.setFontSize(small)
       railFinish.setFontSize(small)
+      this.raceOverflowText.setFontSize(small)
       if (layout.railAxis === 'vertical') {
         railTitle.setOrigin(0.5, 0).setPosition(rail.x + rail.width / 2, rail.y + small * 0.6)
         railStart.setOrigin(0.5, 1).setPosition(rail.x + rail.width / 2, rail.y + rail.height - 2)
         railFinish.setOrigin(0.5, 0).setPosition(rail.x + rail.width / 2, rail.y + small * 2.4)
         railTitle.setVisible(true)
+        this.raceOverflowText
+          .setOrigin(0.5, 0)
+          .setPosition(rail.x + rail.width / 2, rail.y + small * 4)
       } else {
         railTitle.setVisible(false)
         railStart.setOrigin(0, 0.5).setPosition(rail.x + 6, rail.y + rail.height / 2)
         railFinish.setOrigin(1, 0.5).setPosition(rail.x + rail.width - 6, rail.y + rail.height / 2)
+        this.raceOverflowText
+          .setOrigin(0.5, 1)
+          .setPosition(rail.x + rail.width / 2, rail.y + rail.height - 2)
       }
     })
 
@@ -634,7 +652,13 @@ export class RiverScene extends Phaser.Scene {
       graphics.lineBetween(axisFrom, cross, axisTo, cross)
     }
 
-    const sorted = rankRacers(this.racers)
+    for (const label of this.raceLabels.values()) label.setVisible(false)
+    const visibleRacers = selectRailRacers(this.racers, MAX_VISIBLE_RAIL_RACERS)
+    const hiddenCount = this.racers.length - visibleRacers.length
+    this.raceOverflowText
+      .setText(hiddenCount > 0 ? `+${hiddenCount} RACERS` : '')
+      .setVisible(hiddenCount > 0)
+    const sorted = rankRacers(visibleRacers)
     const placed = sorted.map((racer) => {
       const along = axisFrom + (axisTo - axisFrom) * racer.progress
       return {
@@ -684,21 +708,24 @@ export class RiverScene extends Phaser.Scene {
       const labelText = racer.eliminated ? `${racer.name}  OUT` : racer.name
       const labelX = vertical ? cross + radius + 6 : labelAlong
       const labelY = vertical ? labelAlong : cross - radius - size * 1.1
-      const existing = this.children.getByName(name) as Phaser.GameObjects.Text | null
+      const existing = this.raceLabels.get(name)
       if (existing) {
         existing
+          .setVisible(true)
           .setText(labelText)
+          .setColor(color)
           .setFontSize(size)
           .setAlpha(racer.eliminated ? 0.5 : 1)
           .setOrigin(vertical ? 0 : 0.5, vertical ? 0.5 : 0)
           .setPosition(labelX, labelY)
       } else {
-        this.add
+        const labelObject = this.add
           .text(labelX, labelY, labelText, headingStyle(size, color))
           .setName(name)
           .setDepth(13)
           .setAlpha(racer.eliminated ? 0.5 : 1)
           .setOrigin(vertical ? 0 : 0.5, vertical ? 0.5 : 0)
+        this.raceLabels.set(name, labelObject)
       }
     }
   }
@@ -945,6 +972,7 @@ export class RiverScene extends Phaser.Scene {
     this.input.keyboard?.off('keydown-ESC', this.returnToMenu, this)
     this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this)
     this.layoutAppliers = []
+    this.raceLabels.clear()
     this.race.destroy()
     this.activeGuideCall?.stop()
     this.activeGuideCall?.destroy()

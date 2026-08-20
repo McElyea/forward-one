@@ -21,6 +21,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
     "phaser": "^4.2.1"
   },
   "overrides": {

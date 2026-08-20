@@ -294,6 +294,158 @@ export function levelCardText(card: Rect): LevelCardText {
 }
 
 // ---------------------------------------------------------------------------
+// Multiplayer lobby
+// ---------------------------------------------------------------------------
+
+export interface LobbyLayout {
+  mode: LayoutMode
+  width: number
+  height: number
+  type: Typography
+  gutter: number
+  title: Point
+  content: Rect
+  nameInput: Rect
+  capacityButtons: Rect[]
+  createButton: Rect
+  codeInput: Rect
+  joinButton: Rect
+  members: Rect
+  roomButtons: [Rect, Rect, Rect, Rect]
+  backButton: Rect
+}
+
+export function lobbyLayout(width: number, height: number): LobbyLayout {
+  const mode = layoutMode(width, height)
+  const type = typography(width, height)
+  const g = gutter(width, height)
+  const gap = round(clamp(g * 0.55, 8, 16))
+  const title = { x: g, y: g }
+  const contentY = round(g + type.hero * 1.18)
+  const content: Rect = {
+    x: g,
+    y: contentY,
+    width: round(width - g * 2),
+    height: round(height - contentY - g),
+  }
+  const targetHeight = round(clamp(height * 0.09, MIN_TOUCH_PX, 58))
+
+  let nameInput: Rect
+  let capacityButtons: Rect[]
+  let createButton: Rect
+  let codeInput: Rect
+  let joinButton: Rect
+
+  if (mode === 'landscape') {
+    const columnGap = round(gap * 1.5)
+    const columnWidth = (content.width - columnGap) / 2
+    const left = content.x
+    const right = round(content.x + columnWidth + columnGap)
+    const fieldTop = round(content.y + type.heading * 1.35)
+    nameInput = { x: left, y: fieldTop, width: round(columnWidth), height: targetHeight }
+    const capacityTop = round(fieldTop + targetHeight + type.heading * 1.55)
+    const capacityWidth = (columnWidth - gap * 3) / 4
+    capacityButtons = Array.from({ length: 4 }, (_, index) => ({
+      x: round(left + index * (capacityWidth + gap)),
+      y: capacityTop,
+      width: round(capacityWidth),
+      height: MIN_TOUCH_PX,
+    }))
+    createButton = {
+      x: left,
+      y: round(capacityTop + MIN_TOUCH_PX + gap),
+      width: round(columnWidth),
+      height: targetHeight,
+    }
+    codeInput = { x: right, y: fieldTop, width: round(columnWidth), height: targetHeight }
+    joinButton = {
+      x: right,
+      y: round(fieldTop + targetHeight + gap),
+      width: round(columnWidth),
+      height: targetHeight,
+    }
+  } else {
+    const fieldTop = round(content.y + type.heading * 1.35)
+    nameInput = { x: content.x, y: fieldTop, width: content.width, height: targetHeight }
+    const capacityTop = round(fieldTop + targetHeight + type.heading * 1.55)
+    const capacityWidth = (content.width - gap * 3) / 4
+    capacityButtons = Array.from({ length: 4 }, (_, index) => ({
+      x: round(content.x + index * (capacityWidth + gap)),
+      y: capacityTop,
+      width: round(capacityWidth),
+      height: MIN_TOUCH_PX,
+    }))
+    createButton = {
+      x: content.x,
+      y: round(capacityTop + MIN_TOUCH_PX + gap),
+      width: content.width,
+      height: targetHeight,
+    }
+    const joinTop = round(createButton.y + createButton.height + type.heading * 1.55)
+    const joinWidth = round(clamp(content.width * 0.36, 96, 180))
+    codeInput = {
+      x: content.x,
+      y: joinTop,
+      width: round(content.width - joinWidth - gap),
+      height: targetHeight,
+    }
+    joinButton = {
+      x: round(content.x + content.width - joinWidth),
+      y: joinTop,
+      width: joinWidth,
+      height: targetHeight,
+    }
+  }
+
+  const roomButtonGap = gap
+  const roomButtonWidth = (content.width - roomButtonGap) / 2
+  const roomButtonsTop = round(content.y + content.height - targetHeight * 2 - roomButtonGap)
+  const roomButtons: [Rect, Rect, Rect, Rect] = [0, 1, 2, 3].map((index) => ({
+    x: round(content.x + (index % 2) * (roomButtonWidth + roomButtonGap)),
+    y: round(roomButtonsTop + Math.floor(index / 2) * (targetHeight + roomButtonGap)),
+    width: round(roomButtonWidth),
+    height: targetHeight,
+  })) as [Rect, Rect, Rect, Rect]
+  const members: Rect = {
+    x: content.x,
+    y: round(content.y + type.title * 1.65),
+    width: content.width,
+    height: round(Math.max(type.body * 3, roomButtonsTop - gap - content.y - type.title * 1.65)),
+  }
+  const backButton: Rect = mode === 'landscape'
+    ? {
+        x: codeInput.x,
+        y: round(joinButton.y + joinButton.height + gap),
+        width: codeInput.width,
+        height: MIN_TOUCH_PX,
+      }
+    : {
+        x: content.x,
+        y: round(codeInput.y + codeInput.height + gap),
+        width: content.width,
+        height: MIN_TOUCH_PX,
+      }
+
+  return {
+    mode,
+    width,
+    height,
+    type,
+    gutter: g,
+    title,
+    content,
+    nameInput,
+    capacityButtons,
+    createButton,
+    codeInput,
+    joinButton,
+    members,
+    roomButtons,
+    backButton,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // River
 // ---------------------------------------------------------------------------
 

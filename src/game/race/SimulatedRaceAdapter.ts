@@ -1,4 +1,5 @@
 import type { RacerSnapshot, StrokeJudgment } from '../types'
+import { RACER_COLORS } from '../ui/theme'
 import type { RaceAdapter } from './RaceAdapter'
 
 const clamp = (value: number): number => Math.max(0, Math.min(1, value))
@@ -19,8 +20,9 @@ export class SimulatedRaceAdapter implements RaceAdapter {
   readonly kind = 'multiplayer-preview' as const
   private survivalBaselineMs = 38_000
 
-  start(survivalBaselineMs: number): void {
+  start(survivalBaselineMs: number): { countdownMs: number } {
     this.survivalBaselineMs = survivalBaselineMs
+    return { countdownMs: 2_400 }
   }
 
   recordStroke(_judgment: StrokeJudgment): void {}
@@ -54,16 +56,16 @@ export class SimulatedRaceAdapter implements RaceAdapter {
       {
         id: 'local',
         name: 'YOU',
-        color: 0xffc857,
+        color: RACER_COLORS[0],
         progress: localProgress,
         survivalMs: elapsedMs,
         eliminated: localEliminated,
         isLocal: true,
         connected: true,
       },
-      rival('maya', 'MAYA', 0x56d6c9),
-      rival('eli', 'ELI', 0xef6f9f),
-      rival('jo', 'JO', 0xb695ff),
+      rival('maya', 'MAYA', RACER_COLORS[1]),
+      rival('eli', 'ELI', RACER_COLORS[2]),
+      rival('jo', 'JO', RACER_COLORS[3]),
     ]
   }
 

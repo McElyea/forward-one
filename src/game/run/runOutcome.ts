@@ -29,11 +29,18 @@ export function placeOfLocal(ranked: RacerSnapshot[]): number {
 }
 
 /**
- * The place as the summary screen says it. Only four boats ever race, so the
- * numeric fallback is a backstop rather than a display path.
+ * The place as the summary screen says it. The first four are spelled out to
+ * preserve the original presentation; larger rooms use numeric ordinals.
  */
 export function placeLabel(place: number): string {
-  return PLACE_NAMES[place - 1] ?? `${place}TH`
+  const namedPlace = PLACE_NAMES[place - 1]
+  if (namedPlace) return namedPlace
+
+  const lastTwo = place % 100
+  const suffix = lastTwo >= 11 && lastTwo <= 13
+    ? 'TH'
+    : ({ 1: 'ST', 2: 'ND', 3: 'RD' } as Record<number, string>)[place % 10] ?? 'TH'
+  return `${place}${suffix}`
 }
 
 export function runOutcome(

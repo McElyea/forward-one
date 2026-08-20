@@ -5,8 +5,9 @@ import type { RacerSnapshot, StrokeJudgment } from '../types'
  * whether snapshots came from local simulation or a realtime WebSocket room.
  */
 export interface RaceAdapter {
-  readonly kind: 'solo' | 'multiplayer-preview'
-  start(survivalBaselineMs: number): void
+  readonly kind: 'solo' | 'multiplayer-preview' | 'multiplayer'
+  /** Returns how long the scene should count down before local elapsed time begins. */
+  start(survivalBaselineMs: number): { countdownMs: number }
   recordStroke(judgment: StrokeJudgment): void
   update(
     elapsedMs: number,

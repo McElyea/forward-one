@@ -1,6 +1,6 @@
 export type RapidClass = 2 | 3 | 4 | 5
 
-export type RaceMode = 'solo' | 'multiplayer-preview'
+export type RaceMode = 'solo' | 'multiplayer-preview' | 'multiplayer'
 
 export type PaddleDirection = 'forward' | 'backward'
 

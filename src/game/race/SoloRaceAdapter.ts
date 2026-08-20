@@ -1,10 +1,13 @@
 import type { RacerSnapshot, StrokeJudgment } from '../types'
+import { RACER_COLORS } from '../ui/theme'
 import type { RaceAdapter } from './RaceAdapter'
 
 export class SoloRaceAdapter implements RaceAdapter {
   readonly kind = 'solo' as const
 
-  start(): void {}
+  start(): { countdownMs: number } {
+    return { countdownMs: 2_400 }
+  }
 
   recordStroke(_judgment: StrokeJudgment): void {}
 
@@ -17,7 +20,7 @@ export class SoloRaceAdapter implements RaceAdapter {
       {
         id: 'local',
         name: 'YOU',
-        color: 0xffc857,
+        color: RACER_COLORS[0],
         progress: localProgress,
         survivalMs: elapsedMs,
         eliminated: localEliminated,

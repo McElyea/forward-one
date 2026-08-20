@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { LobbyScene } from './scenes/LobbyScene'
 import { MenuScene } from './scenes/MenuScene'
 import { RiverScene } from './scenes/RiverScene'
 
@@ -7,7 +8,7 @@ export function startGame(parent: HTMLElement): Phaser.Game {
     type: Phaser.AUTO,
     parent,
     backgroundColor: '#071f26',
-    scene: [MenuScene, RiverScene],
+    scene: [MenuScene, LobbyScene, RiverScene],
     scale: {
       // RESIZE rather than FIT: the canvas matches the viewport, so one game
       // unit is one CSS pixel and the sizes in ui/layout.ts are the sizes the

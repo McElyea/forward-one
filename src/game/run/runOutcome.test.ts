@@ -31,12 +31,22 @@ describe('placeOfLocal', () => {
 })
 
 describe('placeLabel', () => {
-  it('names the four places a race can finish in', () => {
+  it('spells out the original four places', () => {
     expect([1, 2, 3, 4].map(placeLabel)).toEqual(['FIRST', 'SECOND', 'THIRD', 'FOURTH'])
   })
 
-  it('falls back to a number past the boats that race', () => {
-    expect(placeLabel(5)).toBe('5TH')
+  it('formats numeric ordinals for larger rooms', () => {
+    expect([5, 8, 11, 12, 13, 21, 32, 63, 64].map(placeLabel)).toEqual([
+      '5TH',
+      '8TH',
+      '11TH',
+      '12TH',
+      '13TH',
+      '21ST',
+      '32ND',
+      '63RD',
+      '64TH',
+    ])
   })
 })
 

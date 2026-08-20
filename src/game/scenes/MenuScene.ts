@@ -8,10 +8,12 @@ import {
   type GuideVoiceId,
 } from '../audio/guideAudio'
 import { LEVELS } from '../levels'
-import type { LevelConfig, RaceMode } from '../types'
+import { isMultiplayerConfigured } from '../multiplayer/multiplayerConfig'
+import { isRoomCode, normalizeRoomCode } from '../multiplayer/roomPolicy'
+import type { LevelConfig } from '../types'
 import { descriptionLineSpacing, levelCardText, menuLayout, type MenuLayout } from '../ui/layout'
 import { LevelSelection } from '../ui/levelSelection'
-import { bodyStyle, COLORS, headingStyle, hexToNumber } from '../ui/theme'
+import { bodyStyle, COLORS, headingStyle, hexToNumber, TEXT_COLORS } from '../ui/theme'
 
 interface MenuSceneData {
   /** Carried across a re-layout restart so rotating the device keeps your pick. */
@@ -57,6 +59,14 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
+    const invitedCode = normalizeRoomCode(
+      new URL(window.location.href).searchParams.get('room') ?? '',
+    )
+    if (isMultiplayerConfigured() && isRoomCode(invitedCode)) {
+      this.scene.start('lobby', { levelId: this.levelSelection.selected.id })
+      return
+    }
+
     this.layout = menuLayout(
       this.scale.width,
       this.scale.height,
@@ -112,17 +122,28 @@ export class MenuScene extends Phaser.Scene {
     )
     this.renderSelection()
 
+    const online = isMultiplayerConfigured()
     this.createModeButton(
       this.layout.modeButtons[0],
       'SOLO SURVIVAL',
       'Last as long as you can',
-      'solo',
+      true,
+      () => this.scene.start('river', {
+        levelId: this.levelSelection.selected.id,
+        mode: 'solo',
+      }),
     )
     this.createModeButton(
       this.layout.modeButtons[1],
-      'SURVIVAL RACE',
-      'Outlast 3 simulated rivals',
-      'multiplayer-preview',
+      online ? 'ONLINE RACE' : 'SURVIVAL RACE',
+      online ? '8 default / rooms up to 64' : 'Outlast 3 simulated rivals',
+      false,
+      () => this.scene.start(
+        online ? 'lobby' : 'river',
+        online
+          ? { levelId: this.levelSelection.selected.id }
+          : { levelId: this.levelSelection.selected.id, mode: 'multiplayer-preview' },
+      ),
     )
     this.createVoiceSelector()
 
@@ -255,11 +276,12 @@ export class MenuScene extends Phaser.Scene {
     rect: { x: number; y: number; width: number; height: number },
     title: string,
     subtitle: string,
-    mode: RaceMode,
+    primary: boolean,
+    activate: () => void,
   ): void {
     const { type } = this.layout
-    const fill = mode === 'solo' ? COLORS.yellow : 0x1a4a52
-    const titleColor = mode === 'solo' ? '#071f26' : '#f5f1df'
+    const fill = primary ? COLORS.yellow : COLORS.control
+    const titleColor = primary ? TEXT_COLORS.ink : TEXT_COLORS.cream
     const button = this.add.rectangle(rect.x, rect.y, rect.width, rect.height, fill, 1).setOrigin(0)
     button.setInteractive({ useHandCursor: true })
 
@@ -269,12 +291,10 @@ export class MenuScene extends Phaser.Scene {
       rect.x + pad,
       rect.y + rect.height * 0.16 + type.heading * 1.2,
       subtitle,
-      bodyStyle(Math.round(type.label * 0.9), mode === 'solo' ? '#31545a' : '#9bb9b4'),
+      bodyStyle(Math.round(type.label * 0.9), primary ? '#31545a' : TEXT_COLORS.muted),
     )
 
-    button.on('pointerdown', () => {
-      this.scene.start('river', { levelId: this.levelSelection.selected.id, mode })
-    })
+    button.on('pointerdown', activate)
     button.on('pointerover', () => button.setAlpha(0.84))
     button.on('pointerout', () => button.setAlpha(1))
   }
