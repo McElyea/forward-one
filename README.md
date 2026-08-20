@@ -4,7 +4,7 @@
 
 A browser-first whitewater survival racer built with Phaser 4, TypeScript, and Vite.
 
-The game combines an escalating guide-call rhythm loop with rocks, strainers, cross-currents, and wave trains. Class II–V water sets the starting pressure, then calls repeat faster until the player is swept away. Solo mode records survival time; the multiplayer preview asks the player to outlast three simulated racers behind the same `RaceAdapter` interface a future hosted room will use.
+The game combines an escalating guide-call rhythm loop with rocks, strainers, cross-currents, and wave trains. Class II–V water sets the starting pressure, then calls repeat faster until the player is swept away. Solo mode records survival time. With Supabase configured, online rooms start at eight seats and can be expanded to 16, 32, or 64; the zero-configuration build keeps the original three-rival preview available.
 
 ## Run it locally
 
@@ -30,9 +30,9 @@ npm run voice:generate # regenerate all bundled Forward and Backwards calls
 
 Every push to `main` and every pull request runs `npm ci`, `npm run build`, and `npm run test` on Node 22 — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and the badge above.
 
-The `dist/` directory is a static site and can be deployed to Cloudflare Pages, Vercel, Netlify, GitHub Pages, or itch.io.
+The `dist/` directory is a static site and can be deployed to Cloudflare Pages, Vercel, Netlify, GitHub Pages, or itch.io. Multiplayer does not change that deployment shape: the browser connects directly to a managed Supabase project.
 
-Barlow Condensed and Inter are bundled rather than fetched from Google Fonts, so a deployed build makes no third-party requests at runtime. This is a correctness requirement and not only a privacy one: Phaser rasterizes each text object into a texture once and never restyles it, so a font that arrives after the menu is drawn never appears. `src/main.ts` waits for the faces before starting the game, with a timeout so a font failure still boots. Both families are third-party font software under the SIL Open Font License 1.1 rather than this repository's MIT license — see [`src/assets/fonts/LICENSE.txt`](src/assets/fonts/LICENSE.txt).
+Barlow Condensed and Inter are bundled rather than fetched from Google Fonts, so loading the game makes no third-party font request. This is a correctness requirement and not only a privacy one: Phaser rasterizes each text object into a texture once and never restyles it, so a font that arrives after the menu is drawn never appears. `src/main.ts` waits for the faces before starting the game, with a timeout so a font failure still boots. Both families are third-party font software under the SIL Open Font License 1.1 rather than this repository's MIT license — see [`src/assets/fonts/LICENSE.txt`](src/assets/fonts/LICENSE.txt). A configured online race connects to its Supabase project at runtime.
 
 ## Run it in a container
 
@@ -45,7 +45,7 @@ docker run --rm -p 8080:8080 forward-one
 
 Then open <http://localhost:8080>.
 
-The server listens on **8080** as an unprivileged user, so it needs no root and no added capability. It answers `GET /healthz` with a fixed `200` for container healthchecks, fingerprinted `/assets` are served `immutable` while `index.html` is `no-cache`, and TLS and security headers are left to whatever reverse proxy sits in front — [`docker/nginx.conf`](docker/nginx.conf) says why for each. The game keeps no server-side state, so the container needs no volume, no database, and no environment.
+The server listens on **8080** as an unprivileged user, so it needs no root and no added capability. It answers `GET /healthz` with a fixed `200` for container healthchecks, fingerprinted `/assets` are served `immutable` while `index.html` is `no-cache`, and TLS and security headers are left to whatever reverse proxy sits in front — [`docker/nginx.conf`](docker/nginx.conf) says why for each. The container itself keeps no state and needs no volume or database. Online rooms use Supabase when its two public Vite variables are supplied during the build.
 
 Kokoro is a development-only dependency. Its 82M-parameter model is used only by `npm run voice:generate`; players receive small WAV clips and never download the model.
 
@@ -57,9 +57,12 @@ src/game/
   rhythm/RhythmEngine.ts    framework-independent timing judgments
   race/RaceAdapter.ts       solo/multiplayer boundary
   race/SimulatedRaceAdapter.ts
+  race/SupabaseRaceAdapter.ts
+  multiplayer/SupabaseRoomConnection.ts
   survival/SurvivalEngine.ts endless obstacle schedule, intensity, ejection, and recovery
   run/runOutcome.ts         what the summary screen says when a run ends
   scenes/MenuScene.ts
+  scenes/LobbyScene.ts
   scenes/RiverScene.ts
   ui/layout.ts              viewport-driven regions and type scale
   ui/fontLoading.ts         gates boot until the bundled faces are usable
@@ -72,9 +75,17 @@ src/assets/fonts/           self-hosted Barlow Condensed and Inter (woff2, OFL 1
 
 [AGENTS.md](AGENTS.md) collects the constraints that are not obvious from reading the source: the Phaser scene-reuse rule, why the test suite runs without a DOM, which compiler flags fail the build, and which files are generated and must not be hand-edited. Worth reading before a first change, by people and coding agents alike.
 
-## Multiplayer path
+## Multiplayer setup
 
-The first hosted multiplayer implementation should add a `SupabaseRaceAdapter` without changing `RiverScene`. It will use Presence for lobby membership and Broadcast for the shared start time, survival snapshots, and elimination events. Client input-event records can later support server validation and ghost races.
+Online races use anonymous Supabase Auth, private Realtime Presence for lobby membership, and Broadcast for the shared start and sparse survival heartbeats. The deterministic river continues to run locally; active opponents advance from the shared database-generated start time. Ranking retains every player, while the in-race rail shows at most eight useful positions—the leader, the local paddler, and nearby racers—so a 64-player room remains legible on a phone.
+
+1. Create a Supabase project and enable **Authentication → Providers → Anonymous Sign-Ins**.
+2. In Realtime settings, disable public channels so the migration's room-membership policies are enforced.
+3. Run [`supabase/migrations/20260819000000_multiplayer_rooms.sql`](supabase/migrations/20260819000000_multiplayer_rooms.sql) in the SQL editor or with the Supabase CLI.
+4. Copy [`.env.example`](.env.example) to `.env.local` and set the project URL and **publishable** key. Never put a secret or service-role key in a `VITE_` variable.
+5. Restart `npm run dev`, or rebuild before deploying—the Vite variables are compiled into the static bundle.
+
+Without both variables, the second menu button intentionally remains the simulated survival race. Before a public launch, enable CAPTCHA or Turnstile for anonymous sign-ins and arrange periodic cleanup of old anonymous Auth users; race rooms themselves expire after two hours and are removed as new rooms are created.
 
 ## License
 

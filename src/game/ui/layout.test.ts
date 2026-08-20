@@ -6,6 +6,7 @@ import {
   gutter,
   layoutMode,
   levelCardText,
+  lobbyLayout,
   menuLayout,
   riverLayout,
   typography,
@@ -374,6 +375,43 @@ describe('riverLayout', () => {
     expect(layout.survivalStatus.x).toBeLessThanOrEqual(layout.river.x + layout.river.width)
     expect(layout.survivalStatus.y).toBeGreaterThanOrEqual(layout.river.y)
     expect(layout.survivalStatus.y).toBeLessThanOrEqual(layout.river.y + layout.river.height)
+  })
+})
+
+describe('lobbyLayout', () => {
+  it.each(VIEWPORTS)('keeps every lobby target on screen and touchable on $name', ({
+    width,
+    height,
+  }) => {
+    const layout = lobbyLayout(width, height)
+    const targets = [
+      layout.nameInput,
+      ...layout.capacityButtons,
+      layout.createButton,
+      layout.codeInput,
+      layout.joinButton,
+      ...layout.roomButtons,
+      layout.backButton,
+    ]
+
+    for (const target of targets) {
+      expect(within(target, width, height)).toBe(true)
+      expect(shorterSide(target)).toBeGreaterThanOrEqual(MIN_TOUCH_PX)
+    }
+    expect(within(layout.members, width, height)).toBe(true)
+  })
+
+  it('splits setup into two columns on a landscape phone', () => {
+    const layout = lobbyLayout(667, 375)
+    expect(layout.mode).toBe('landscape')
+    expect(layout.codeInput.x).toBeGreaterThan(layout.nameInput.x + layout.nameInput.width)
+  })
+
+  it('stacks setup controls in portrait', () => {
+    const layout = lobbyLayout(393, 852)
+    expect(layout.mode).toBe('portrait')
+    expect(layout.createButton.y).toBeGreaterThan(layout.nameInput.y + layout.nameInput.height)
+    expect(layout.codeInput.y).toBeGreaterThan(layout.createButton.y + layout.createButton.height)
   })
 })
 
