@@ -80,6 +80,13 @@ describe('menuLayout', () => {
     for (const button of layout.voiceButtons) {
       expect(shorterSide(button)).toBeGreaterThanOrEqual(MIN_TOUCH_PX)
     }
+    for (const button of [
+      layout.startButton,
+      layout.howToPlayButton,
+      layout.howToPlayCloseButton,
+    ]) {
+      expect(shorterSide(button)).toBeGreaterThanOrEqual(MIN_TOUCH_PX)
+    }
   })
 
   it.each(VIEWPORTS)('keeps every menu element on screen on $name', ({ width, height }) => {
@@ -90,6 +97,10 @@ describe('menuLayout', () => {
       ...layout.modeButtons,
       ...layout.voiceButtons,
       layout.voicePanel,
+      layout.startButton,
+      layout.howToPlayButton,
+      layout.howToPlayPanel,
+      layout.howToPlayCloseButton,
     ]) {
       expect(within(rect, width, height)).toBe(true)
     }
@@ -254,15 +265,35 @@ describe('menuLayout', () => {
 
     expect(layout.voicePanel.y).toBeGreaterThanOrEqual(firstMode.y + firstMode.height)
   })
+
+  it('splits the brand and run setup into separate desktop columns', () => {
+    const layout = menuLayout(1440, 900, LEVEL_COUNT, VOICE_COUNT)
+
+    expect(layout.split).toBe(true)
+    expect(layout.setupPanel.x).toBeGreaterThan(layout.title.x)
+    expect(layout.cards[0].x).toBeGreaterThanOrEqual(layout.setupPanel.x)
+    expect(layout.startButton.x).toBeGreaterThanOrEqual(layout.setupPanel.x)
+  })
+
+  it('keeps one stacked surface on compact screens', () => {
+    expect(menuLayout(393, 852, LEVEL_COUNT, VOICE_COUNT).split).toBe(false)
+    expect(menuLayout(852, 393, LEVEL_COUNT, VOICE_COUNT).split).toBe(false)
+  })
 })
 
 describe('riverLayout', () => {
   it.each(VIEWPORTS)('keeps both paddle controls touchable on $name', ({ width, height }) => {
-    const { controls } = riverLayout(width, height)
+    const { controls, pauseButton, modalPrimaryButton, modalSecondaryButton } = riverLayout(
+      width,
+      height,
+    )
 
     expect(shorterSide(controls.forward)).toBeGreaterThanOrEqual(MIN_TOUCH_PX)
     expect(shorterSide(controls.backward)).toBeGreaterThanOrEqual(MIN_TOUCH_PX)
     expect(controls.backward.x).toBeGreaterThan(controls.forward.x)
+    expect(shorterSide(pauseButton)).toBeGreaterThanOrEqual(MIN_TOUCH_PX)
+    expect(shorterSide(modalPrimaryButton)).toBeGreaterThanOrEqual(MIN_TOUCH_PX)
+    expect(shorterSide(modalSecondaryButton)).toBeGreaterThanOrEqual(MIN_TOUCH_PX)
   })
 
   it.each(VIEWPORTS)('never puts anything under the top bar on $name', ({ width, height }) => {
@@ -331,6 +362,10 @@ describe('riverLayout', () => {
       layout.rhythmLane,
       layout.controls.forward,
       layout.controls.backward,
+      layout.pauseButton,
+      layout.modalPanel,
+      layout.modalPrimaryButton,
+      layout.modalSecondaryButton,
     ]) {
       expect(within(rect, width, height)).toBe(true)
     }
@@ -355,7 +390,19 @@ describe('riverLayout', () => {
       const layout = riverLayout(width, height)
       expect(layout.targetX).toBeGreaterThan(layout.rhythmLane.x)
       expect(layout.targetX).toBeLessThan(layout.rhythmLane.x + layout.rhythmLane.width)
+      expect(
+        Math.abs(layout.targetX - (layout.rhythmLane.x + layout.rhythmLane.width / 2)),
+      ).toBeLessThanOrEqual(1)
     }
+  })
+
+  it('uses the full river width when a solo run does not need a rival rail', () => {
+    const layout = riverLayout(1440, 900, false)
+
+    expect(layout.railVisible).toBe(false)
+    expect(layout.rail.width).toBe(0)
+    expect(layout.river.width).toBe(1440)
+    expect(layout.call.x).toBe(720)
   })
 
   it('centres the call text and the raft on the river, not on the whole canvas', () => {

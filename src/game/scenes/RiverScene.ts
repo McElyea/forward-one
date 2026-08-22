@@ -84,7 +84,10 @@ export class RiverScene extends Phaser.Scene {
   private startAt = 0
   private lastCueIndex = -1
   private totalPoints = 0
+  private streak = 0
   private completed = false
+  private paused = false
+  private pausedAt = 0
   private returningToMenu = false
   private riverGraphics!: Phaser.GameObjects.Graphics
   private rhythmGraphics!: Phaser.GameObjects.Graphics
@@ -94,6 +97,9 @@ export class RiverScene extends Phaser.Scene {
   private callText!: Phaser.GameObjects.Text
   private callSubtext!: Phaser.GameObjects.Text
   private feedbackText!: Phaser.GameObjects.Text
+  private feedbackPlate!: Phaser.GameObjects.Rectangle
+  private gateLabelText!: Phaser.GameObjects.Text
+  private laneHintText!: Phaser.GameObjects.Text
   private statsText!: Phaser.GameObjects.Text
   private survivalText!: Phaser.GameObjects.Text
   private timeText!: Phaser.GameObjects.Text
@@ -101,6 +107,7 @@ export class RiverScene extends Phaser.Scene {
   private raceLabels = new Map<string, Phaser.GameObjects.Text>()
   private raceOverflowText!: Phaser.GameObjects.Text
   private activeGuideCall?: Phaser.Sound.BaseSound
+  private pauseObjects: Array<Phaser.GameObjects.Rectangle | Phaser.GameObjects.Text> = []
   private guideVoiceId: GuideVoiceId = getSelectedGuideVoiceId()
   /**
    * How each display object places itself for a given layout. Registering a
@@ -125,11 +132,15 @@ export class RiverScene extends Phaser.Scene {
     this.race = createRaceAdapter(this.mode, data.hostedSession)
     this.lastCueIndex = -1
     this.totalPoints = 0
+    this.streak = 0
     this.completed = false
+    this.paused = false
+    this.pausedAt = 0
     this.returningToMenu = false
     this.guideVoiceId = getSelectedGuideVoiceId()
     this.racers = []
     this.raceLabels = new Map<string, Phaser.GameObjects.Text>()
+    this.pauseObjects = []
     // Scene instances are reused, so this must not carry the last run's closures.
     this.layoutAppliers = []
   }
@@ -141,12 +152,12 @@ export class RiverScene extends Phaser.Scene {
   }
 
   private handleResize(): void {
-    this.layout = riverLayout(this.scale.width, this.scale.height)
+    this.layout = riverLayout(this.scale.width, this.scale.height, this.mode !== 'solo')
     for (const apply of this.layoutAppliers) apply(this.layout)
   }
 
   create(): void {
-    this.layout = riverLayout(this.scale.width, this.scale.height)
+    this.layout = riverLayout(this.scale.width, this.scale.height, this.mode !== 'solo')
 
     this.cameras.main.setBackgroundColor(COLORS.bank)
     this.riverGraphics = this.add.graphics()
@@ -160,7 +171,7 @@ export class RiverScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-UP', this.onForwardPaddle, this)
     this.input.keyboard?.on('keydown-B', this.onBackwardPaddle, this)
     this.input.keyboard?.on('keydown-DOWN', this.onBackwardPaddle, this)
-    this.input.keyboard?.on('keydown-ESC', this.returnToMenu, this)
+    this.input.keyboard?.on('keydown-ESC', this.togglePause, this)
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanUp, this)
 
@@ -169,7 +180,7 @@ export class RiverScene extends Phaser.Scene {
   }
 
   update(time: number): void {
-    if (this.completed) return
+    if (this.completed || this.paused) return
 
     const elapsed = time - this.startAt
     const activeElapsed = Math.max(0, elapsed)
@@ -178,6 +189,7 @@ export class RiverScene extends Phaser.Scene {
     const missed = this.rhythm.expire(activeElapsed)
 
     for (const target of missed) {
+      this.streak = 0
       this.showFeedback('MISS', 'miss')
       const judgment: StrokeJudgment = {
         target,
@@ -267,7 +279,7 @@ export class RiverScene extends Phaser.Scene {
       .setDepth(11)
     this.timeText = this.add.text(0, 0, formatRunClock(0), headingStyle(type.title)).setDepth(11)
     this.statsText = this.add
-      .text(0, 0, '100%  /  0', bodyStyle(type.label, TEXT_COLORS.muted))
+      .text(0, 0, 'ACCURACY 100%   SCORE 0', bodyStyle(type.label, TEXT_COLORS.muted))
       .setDepth(11)
       .setOrigin(1, 0.5)
 
@@ -291,13 +303,33 @@ export class RiverScene extends Phaser.Scene {
         .setFontSize(layout.type.label)
         .setVisible(wide)
       this.timeText
-        // Right-aligned clear of the stats readout, with room for its widest
-        // form ("100%  /  99999") rather than for the string showing now.
-        .setPosition(layout.statsText.x - layout.type.label * 7.5, mid)
-        .setOrigin(1, 0.5)
+        .setPosition(layout.timeText.x, mid)
+        .setOrigin(0.5)
         .setFontSize(layout.type.title)
       this.statsText.setPosition(layout.statsText.x, mid).setFontSize(layout.type.label)
     })
+
+    const pauseButton = this.add
+      .rectangle(0, 0, 10, 10, COLORS.inkSoft, 1)
+      .setOrigin(0)
+      .setDepth(12)
+      .setStrokeStyle(2, 0x31545a, 1)
+      .setInteractive({ useHandCursor: true })
+    const pauseLabel = this.add
+      .text(0, 0, 'Ⅱ', headingStyle(type.heading, TEXT_COLORS.cream))
+      .setOrigin(0.5)
+      .setDepth(13)
+      .setInteractive({ useHandCursor: true })
+    this.onLayout((layout) => {
+      const rect = layout.pauseButton
+      pauseButton.setPosition(rect.x, rect.y).setSize(rect.width, rect.height)
+      pauseLabel
+        .setPosition(rect.x + rect.width / 2, rect.y + rect.height / 2)
+        .setFontSize(layout.type.heading)
+    })
+    const pause = (): void => this.togglePause()
+    pauseButton.on('pointerdown', pause)
+    pauseLabel.on('pointerdown', pause)
 
     this.callText = this.add.text(0, 0, 'GET READY', headingStyle(type.hero, '#ffc857'))
       .setOrigin(0.5)
@@ -307,6 +339,11 @@ export class RiverScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(9)
       .setLetterSpacing(1.3)
+    this.feedbackPlate = this.add
+      .rectangle(0, 0, 10, 10, COLORS.ink, 0.78)
+      .setDepth(19)
+      .setStrokeStyle(2, COLORS.cream, 0.2)
+      .setVisible(false)
     this.feedbackText = this.add.text(0, 0, '', headingStyle(type.title))
       .setOrigin(0.5)
       .setDepth(20)
@@ -321,9 +358,38 @@ export class RiverScene extends Phaser.Scene {
       this.feedbackText
         .setPosition(layout.feedback.x, layout.feedback.y)
         .setFontSize(layout.type.title)
+      this.feedbackPlate
+        .setPosition(layout.feedback.x, layout.feedback.y)
+        .setSize(Math.max(132, layout.type.title * 6.4), Math.max(42, layout.type.title * 1.7))
       this.survivalText
         .setPosition(layout.survivalStatus.x, layout.survivalStatus.y)
         .setFontSize(layout.type.label)
+    })
+
+    this.gateLabelText = this.add
+      .text(0, 0, 'HIT\nHERE', headingStyle(type.label, TEXT_COLORS.yellow))
+      .setOrigin(0.5, 0)
+      .setDepth(17)
+      .setLetterSpacing(1)
+      .setAlign('center')
+    this.laneHintText = this.add
+      .text(
+        0,
+        0,
+        'MATCH THE CALL WHEN IT REACHES THE GATE',
+        headingStyle(Math.round(type.label * 0.82), TEXT_COLORS.muted),
+      )
+      .setOrigin(0, 1)
+      .setDepth(17)
+      .setLetterSpacing(0.8)
+    this.onLayout((layout) => {
+      this.gateLabelText
+        .setPosition(layout.gateLabel.x, layout.gateLabel.y)
+        .setFontSize(layout.type.label)
+      this.laneHintText
+        .setPosition(layout.laneHint.x, layout.laneHint.y)
+        .setFontSize(Math.round(layout.type.label * 0.82))
+        .setVisible(!layout.controlsOverlay && layout.width >= 600)
     })
 
     const railTitle = this.add
@@ -364,9 +430,13 @@ export class RiverScene extends Phaser.Scene {
           .setOrigin(0.5, 1)
           .setPosition(rail.x + rail.width / 2, rail.y + rail.height - 2)
       }
+      railTitle.setVisible(layout.railVisible && layout.railAxis === 'vertical')
+      railStart.setVisible(layout.railVisible)
+      railFinish.setVisible(layout.railVisible)
+      if (!layout.railVisible) this.raceOverflowText.setVisible(false)
     })
 
-    const escHint = this.add.text(0, 0, 'ESC  MENU', headingStyle(type.label, '#9bb9b4')).setDepth(20).setLetterSpacing(1)
+    const escHint = this.add.text(0, 0, 'ESC  PAUSE', headingStyle(type.label, '#9bb9b4')).setDepth(20).setLetterSpacing(1)
     this.onLayout((layout) => {
       escHint
         .setFontSize(Math.round(layout.type.label * 0.9))
@@ -379,6 +449,110 @@ export class RiverScene extends Phaser.Scene {
 
     this.createPaddleButton('forward', 'FORWARD', 'SPACE  /  F')
     this.createPaddleButton('backward', 'BACKWARDS', 'B  /  ↓')
+    this.createPauseOverlay()
+  }
+
+  private createPauseOverlay(): void {
+    const { type } = this.layout
+    const scrim = this.add
+      .rectangle(0, 0, 10, 10, COLORS.ink, 0.9)
+      .setOrigin(0)
+      .setDepth(50)
+      .setInteractive()
+    const panel = this.add
+      .rectangle(0, 0, 10, 10, COLORS.inkSoft, 1)
+      .setOrigin(0)
+      .setDepth(51)
+      .setStrokeStyle(2, 0x31545a, 1)
+    const eyebrow = this.add
+      .text(0, 0, 'RUN ON HOLD', headingStyle(type.label, TEXT_COLORS.muted))
+      .setOrigin(0.5)
+      .setDepth(52)
+      .setLetterSpacing(2)
+    const title = this.add
+      .text(0, 0, 'PAUSED', headingStyle(type.hero, TEXT_COLORS.cream))
+      .setOrigin(0.5)
+      .setDepth(52)
+    const copy = this.add
+      .text(
+        0,
+        0,
+        'The river waits. Resume on your count.',
+        bodyStyle(type.body, TEXT_COLORS.muted),
+      )
+      .setOrigin(0.5)
+      .setDepth(52)
+    const resumeButton = this.add
+      .rectangle(0, 0, 10, 10, COLORS.yellow, 1)
+      .setOrigin(0)
+      .setDepth(52)
+      .setInteractive({ useHandCursor: true })
+    const resumeLabel = this.add
+      .text(0, 0, 'RESUME RUN', headingStyle(type.heading, TEXT_COLORS.ink))
+      .setOrigin(0.5)
+      .setDepth(53)
+      .setInteractive({ useHandCursor: true })
+    const menuButton = this.add
+      .rectangle(0, 0, 10, 10, COLORS.inkSoft, 1)
+      .setOrigin(0)
+      .setDepth(52)
+      .setStrokeStyle(2, COLORS.waterLight, 1)
+      .setInteractive({ useHandCursor: true })
+    const menuLabel = this.add
+      .text(0, 0, 'CHANGE SETUP', headingStyle(type.heading, TEXT_COLORS.waterLight))
+      .setOrigin(0.5)
+      .setDepth(53)
+      .setInteractive({ useHandCursor: true })
+
+    this.pauseObjects = [
+      scrim,
+      panel,
+      eyebrow,
+      title,
+      copy,
+      resumeButton,
+      resumeLabel,
+      menuButton,
+      menuLabel,
+    ]
+    for (const object of this.pauseObjects) object.setVisible(false)
+
+    this.onLayout((layout) => {
+      const modal = layout.modalPanel
+      const primary = layout.modalPrimaryButton
+      const secondary = layout.modalSecondaryButton
+      const cx = modal.x + modal.width / 2
+      scrim.setPosition(0, 0).setSize(layout.width, layout.height)
+      panel.setPosition(modal.x, modal.y).setSize(modal.width, modal.height)
+      eyebrow
+        .setPosition(cx, modal.y + modal.height * 0.16)
+        .setFontSize(layout.type.label)
+      title
+        .setPosition(cx, modal.y + modal.height * 0.3)
+        .setFontSize(layout.type.hero)
+      copy
+        .setPosition(cx, modal.y + modal.height * 0.45)
+        .setFontSize(layout.type.body)
+      resumeButton
+        .setPosition(primary.x, primary.y)
+        .setSize(primary.width, primary.height)
+      resumeLabel
+        .setPosition(primary.x + primary.width / 2, primary.y + primary.height / 2)
+        .setFontSize(layout.type.heading)
+      menuButton
+        .setPosition(secondary.x, secondary.y)
+        .setSize(secondary.width, secondary.height)
+      menuLabel
+        .setPosition(secondary.x + secondary.width / 2, secondary.y + secondary.height / 2)
+        .setFontSize(layout.type.heading)
+    })
+
+    const resume = (): void => this.resumeRun()
+    resumeButton.on('pointerdown', resume)
+    resumeLabel.on('pointerdown', resume)
+    const menu = (): void => this.returnToMenu()
+    menuButton.on('pointerdown', menu)
+    menuLabel.on('pointerdown', menu)
   }
 
   private createPaddleButton(
@@ -597,10 +771,43 @@ export class RiverScene extends Phaser.Scene {
 
     const midY = lane.y + lane.height / 2
     const inset = lane.height * 0.11
-    graphics.lineStyle(4, COLORS.yellow, 1)
-    graphics.lineBetween(targetX, lane.y + inset, targetX, lane.y + lane.height - inset)
+    const gateWidth = Math.max(48, lane.height * 0.58)
+    const gateHeight = lane.height - inset * 2
+    const pulse = elapsed < 0 ? 0 : (Math.sin(elapsed * 0.012) + 1) / 2
+    graphics.lineStyle(2, 0x688e87, 0.55)
+    graphics.lineBetween(lane.x + inset, midY, lane.x + lane.width - inset, midY)
+    for (let index = 1; index < 8; index += 1) {
+      const x = lane.x + (lane.width * index) / 8
+      graphics.lineStyle(2, 0x688e87, 0.36)
+      graphics.lineBetween(x, midY - 5, x, midY + 5)
+    }
+    graphics.fillStyle(COLORS.yellow, 0.1 + pulse * 0.06)
+    graphics.fillRoundedRect(
+      targetX - gateWidth / 2,
+      lane.y + inset,
+      gateWidth,
+      gateHeight,
+      10,
+    )
+    graphics.lineStyle(4, COLORS.yellow, 0.92)
+    graphics.strokeRoundedRect(
+      targetX - gateWidth / 2,
+      lane.y + inset,
+      gateWidth,
+      gateHeight,
+      10,
+    )
+    graphics.lineStyle(2, COLORS.yellow, 0.2 + pulse * 0.22)
+    graphics.strokeCircle(targetX, midY, gateWidth * (0.68 + pulse * 0.18))
     graphics.fillStyle(COLORS.yellow, 1)
-    graphics.fillTriangle(targetX - 8, lane.y + inset, targetX + 8, lane.y + inset, targetX, lane.y + inset + 12)
+    graphics.fillTriangle(
+      targetX - 7,
+      lane.y + inset + 2,
+      targetX + 7,
+      lane.y + inset + 2,
+      targetX,
+      lane.y + inset + 11,
+    )
 
     if (elapsed < 0) return
 
@@ -613,7 +820,7 @@ export class RiverScene extends Phaser.Scene {
       const x = targetX + (target.targetTime - elapsed) * speed
       if (x < lane.x + radius || x > lane.x + lane.width - radius) continue
       const markerColor = target.direction === 'forward'
-        ? (target.strokeIndex === 0 ? hexToNumber(this.level.accent) : COLORS.cream)
+        ? hexToNumber(this.level.accent)
         : COLORS.waterLight
       graphics.fillStyle(markerColor, 1)
       graphics.fillCircle(x, midY, radius)
@@ -626,6 +833,10 @@ export class RiverScene extends Phaser.Scene {
       } else {
         graphics.fillTriangle(x + a * 0.6, midY - a, x + a * 0.6, midY + a, x - a, midY)
       }
+      if (target.strokeIndex > 0) {
+        graphics.fillStyle(COLORS.cream, 0.9)
+        graphics.fillCircle(x, midY - radius * 0.68, 2.5)
+      }
     }
   }
 
@@ -633,6 +844,11 @@ export class RiverScene extends Phaser.Scene {
     const graphics = this.raceGraphics
     const { rail, railAxis, type } = this.layout
     graphics.clear()
+    if (!this.layout.railVisible) {
+      for (const label of this.raceLabels.values()) label.setVisible(false)
+      this.raceOverflowText.setVisible(false)
+      return
+    }
     graphics.setDepth(11)
     graphics.fillStyle(COLORS.ink, 0.92)
     graphics.fillRect(rail.x, rail.y, rail.width, rail.height)
@@ -794,12 +1010,20 @@ export class RiverScene extends Phaser.Scene {
     }
 
     this.timeText.setText(formatRunClock(elapsed))
-    this.statsText.setText(`${this.rhythm.getAccuracy()}%  /  ${this.totalPoints}`)
+    const accuracy = this.rhythm.getAccuracy()
+    this.statsText.setText(
+      this.layout.mode === 'landscape' && this.layout.width >= 760
+        ? `ACCURACY ${accuracy}%   SCORE ${this.totalPoints.toLocaleString()}`
+        : `${accuracy}%  /  ${this.totalPoints.toLocaleString()}`,
+    )
 
     const survival = this.survival.getSnapshot(elapsed)
     if (survival.state === 'aboard') {
       this.survivalText
-        .setText(`RAFT  ${'●'.repeat(survival.stability)}${'○'.repeat(3 - survival.stability)}  /  ${survival.intensity.toFixed(1)}×`)
+        .setText(
+          `RAFT ${survival.stability}/3  •  FLOW ${survival.intensity.toFixed(1)}×` +
+          (this.streak > 1 ? `  •  STREAK ×${this.streak}` : ''),
+        )
         .setColor(TEXT_COLORS.cream)
     } else if (survival.state === 'overboard') {
       this.survivalText
@@ -827,6 +1051,7 @@ export class RiverScene extends Phaser.Scene {
 
   private applyJudgment(judgment: StrokeJudgment): void {
     this.totalPoints += judgment.points
+    this.streak = judgment.target && judgment.points > 0 ? this.streak + 1 : 0
     this.survival.recordJudgment(judgment)
     this.race.recordStroke(judgment)
     this.showFeedback(judgment.rating === 'wrong' ? 'WRONG WAY' : judgment.rating.toUpperCase(), judgment.rating)
@@ -863,13 +1088,25 @@ export class RiverScene extends Phaser.Scene {
   private showFeedback(label: string, rating: StrokeRating): void {
     const { feedback } = this.layout
     this.feedbackText.setText(label).setColor(RATING_COLOR[rating]).setAlpha(1).setScale(1.12)
+    this.feedbackPlate
+      .setVisible(true)
+      .setAlpha(0.86)
+      .setStrokeStyle(2, hexToNumber(RATING_COLOR[rating]), 0.72)
     this.tweens.killTweensOf(this.feedbackText)
+    this.tweens.killTweensOf(this.feedbackPlate)
     this.tweens.add({
       targets: this.feedbackText,
       alpha: 0,
       scale: 1,
       y: { from: feedback.y, to: feedback.y - 20 },
       duration: 520,
+    })
+    this.tweens.add({
+      targets: this.feedbackPlate,
+      alpha: 0,
+      y: { from: feedback.y, to: feedback.y - 20 },
+      duration: 520,
+      onComplete: () => this.feedbackPlate.setVisible(false),
     })
   }
 
@@ -905,7 +1142,17 @@ export class RiverScene extends Phaser.Scene {
     const headingLabel = outcome.heading
     const blurbLabel = outcome.blurb
 
-    const scrim = this.add.rectangle(0, 0, 10, 10, COLORS.ink, 0.82).setOrigin(0).setDepth(50)
+    const scrim = this.add.rectangle(0, 0, 10, 10, COLORS.ink, 0.9).setOrigin(0).setDepth(50)
+    const panel = this.add
+      .rectangle(0, 0, 10, 10, COLORS.inkSoft, 1)
+      .setOrigin(0)
+      .setDepth(50)
+      .setStrokeStyle(2, 0x31545a, 1)
+    const eyebrow = this.add
+      .text(0, 0, 'RUN COMPLETE', headingStyle(this.layout.type.label, TEXT_COLORS.muted))
+      .setOrigin(0.5)
+      .setDepth(51)
+      .setLetterSpacing(2)
     const heading = this.add
       .text(0, 0, headingLabel, headingStyle(this.layout.type.hero, TEXT_COLORS.warning))
       .setOrigin(0.5)
@@ -914,7 +1161,7 @@ export class RiverScene extends Phaser.Scene {
       .text(
         0,
         0,
-        `${formatRunClock(elapsed)}   /   ${this.rhythm.getAccuracy()}% ACCURACY`,
+        `${formatRunClock(elapsed)}   •   ${this.rhythm.getAccuracy()}% ACCURACY   •   ${this.totalPoints.toLocaleString()} PTS`,
         headingStyle(this.layout.type.heading, TEXT_COLORS.cream),
       )
       .setOrigin(0.5)
@@ -926,35 +1173,103 @@ export class RiverScene extends Phaser.Scene {
       .setDepth(51)
       .setWordWrapWidth(this.layout.width * 0.8)
       .setAlign('center')
-    const button = this.add.rectangle(0, 0, 10, 10, COLORS.yellow, 1).setDepth(51).setInteractive({ useHandCursor: true })
-    const buttonLabel = this.add
-      .text(0, 0, 'BACK TO PUT-IN', headingStyle(this.layout.type.heading, '#071f26'))
+    const retryButton = this.add
+      .rectangle(0, 0, 10, 10, COLORS.yellow, 1)
+      .setOrigin(0)
+      .setDepth(51)
+      .setInteractive({ useHandCursor: true })
+    const retryLabel = this.add
+      .text(
+        0,
+        0,
+        this.mode === 'multiplayer' ? 'BACK TO SETUP' : 'RETRY RUN',
+        headingStyle(this.layout.type.heading, TEXT_COLORS.ink),
+      )
+      .setOrigin(0.5)
+      .setDepth(52)
+      .setInteractive({ useHandCursor: true })
+    const setupButton = this.add
+      .rectangle(0, 0, 10, 10, COLORS.inkSoft, 1)
+      .setOrigin(0)
+      .setDepth(51)
+      .setStrokeStyle(2, COLORS.waterLight, 1)
+      .setInteractive({ useHandCursor: true })
+    const setupLabel = this.add
+      .text(0, 0, 'CHANGE SETUP', headingStyle(this.layout.type.heading, TEXT_COLORS.waterLight))
       .setOrigin(0.5)
       .setDepth(52)
       .setInteractive({ useHandCursor: true })
 
     this.onLayout((layout) => {
-      const cx = layout.width / 2
-      const cy = layout.height / 2
+      const modal = layout.modalPanel
+      const primary = layout.modalPrimaryButton
+      const secondary = layout.modalSecondaryButton
+      const cx = modal.x + modal.width / 2
       scrim.setPosition(0, 0).setSize(layout.width, layout.height)
-      heading.setFontSize(layout.type.hero).setPosition(cx, cy - layout.height * 0.19)
-      summary.setFontSize(layout.type.heading).setPosition(cx, cy - layout.height * 0.05)
+      panel.setPosition(modal.x, modal.y).setSize(modal.width, modal.height)
+      eyebrow
+        .setFontSize(layout.type.label)
+        .setPosition(cx, modal.y + modal.height * 0.11)
+      heading
+        .setFontSize(layout.type.hero)
+        .setPosition(cx, modal.y + modal.height * 0.24)
+      summary
+        .setFontSize(layout.type.heading)
+        .setPosition(cx, modal.y + modal.height * 0.39)
       blurb
         .setFontSize(layout.type.body)
-        .setWordWrapWidth(layout.width * 0.8)
-        .setPosition(cx, cy + layout.height * 0.03)
-      const bw = Math.min(layout.width * 0.62, 280)
-      const bh = Math.max(48, layout.height * 0.09)
-      button.setPosition(cx, cy + layout.height * 0.17).setSize(bw, bh)
-      button.setInteractive({ useHandCursor: true })
-      buttonLabel.setFontSize(layout.type.heading).setPosition(cx, cy + layout.height * 0.17)
+        .setWordWrapWidth(modal.width * 0.78)
+        .setPosition(cx, modal.y + modal.height * 0.51)
+      retryButton
+        .setPosition(primary.x, primary.y)
+        .setSize(primary.width, primary.height)
+      retryLabel
+        .setFontSize(layout.type.heading)
+        .setPosition(primary.x + primary.width / 2, primary.y + primary.height / 2)
+      setupButton
+        .setPosition(secondary.x, secondary.y)
+        .setSize(secondary.width, secondary.height)
+      setupLabel
+        .setFontSize(layout.type.heading)
+        .setPosition(secondary.x + secondary.width / 2, secondary.y + secondary.height / 2)
     })
 
-    const activateButton = (): void => this.returnToMenu()
-    button.on('pointerdown', activateButton)
-    buttonLabel.on('pointerdown', activateButton)
-    button.on('pointerover', () => button.setFillStyle(0xffd979, 1))
-    button.on('pointerout', () => button.setFillStyle(COLORS.yellow, 1))
+    const retry = (): void => {
+      if (this.mode === 'multiplayer') {
+        this.returnToMenu()
+        return
+      }
+      this.scene.restart({ levelId: this.level.id, mode: this.mode })
+    }
+    retryButton.on('pointerdown', retry)
+    retryLabel.on('pointerdown', retry)
+    retryButton.on('pointerover', () => retryButton.setFillStyle(0xffd979, 1))
+    retryButton.on('pointerout', () => retryButton.setFillStyle(COLORS.yellow, 1))
+    const setup = (): void => this.returnToMenu()
+    setupButton.on('pointerdown', setup)
+    setupLabel.on('pointerdown', setup)
+  }
+
+  private togglePause(): void {
+    if (this.completed) return
+    if (this.paused) {
+      this.resumeRun()
+      return
+    }
+
+    this.paused = true
+    this.pausedAt = this.time.now
+    this.activeGuideCall?.pause()
+    for (const object of this.pauseObjects) object.setVisible(true)
+  }
+
+  private resumeRun(): void {
+    if (!this.paused) return
+    this.startAt += this.time.now - this.pausedAt
+    this.paused = false
+    this.pausedAt = 0
+    this.activeGuideCall?.resume()
+    for (const object of this.pauseObjects) object.setVisible(false)
   }
 
   private returnToMenu(): void {
@@ -969,7 +1284,7 @@ export class RiverScene extends Phaser.Scene {
     this.input.keyboard?.off('keydown-UP', this.onForwardPaddle, this)
     this.input.keyboard?.off('keydown-B', this.onBackwardPaddle, this)
     this.input.keyboard?.off('keydown-DOWN', this.onBackwardPaddle, this)
-    this.input.keyboard?.off('keydown-ESC', this.returnToMenu, this)
+    this.input.keyboard?.off('keydown-ESC', this.togglePause, this)
     this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this)
     this.layoutAppliers = []
     this.raceLabels.clear()
