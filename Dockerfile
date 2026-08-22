@@ -5,10 +5,10 @@
 #
 # The game is entirely client-side: Phaser runs in the visitor's browser and the
 # selected guide voice lives in that browser's localStorage, so this container
-# holds no player state, needs no volume, and reads no secrets. The Supabase
-# variables in `.env.example` are for a `RaceAdapter` that does not exist yet;
-# when one does, it will be a build-time `VITE_*` value baked into the bundle,
-# which means a `--build-arg` here rather than a runtime environment variable.
+# holds no player state, needs no volume, and reads no environment at run time.
+# The Supabase adapter `.env.example` was written for now exists, and Vite
+# compiles its two `VITE_*` values into the bundle, so they arrive as
+# `--build-arg` below rather than as variables on the running container.
 
 # 22 to match `engines.node` in package.json and the Node CI builds on. Kept in
 # step by `src/docs.test.ts`, which fails if this line and those two disagree.
@@ -25,6 +25,24 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
+
+# Vite substitutes every `import.meta.env.VITE_*` reference into the files it
+# emits, so Supabase is configured for `npm run build` and not for the running
+# container. Declared in this stage only: the values reach the bundle, never the
+# nginx image's environment.
+#
+# Both are public by design. The URL and the *publishable* key are served to
+# every visitor inside the bundle; what protects the data is the row-level
+# security in `supabase/migrations/`, not these being unguessable. Never pass a
+# secret or service-role key here -- `VITE_` means "compiled into a public file".
+#
+# Empty is a supported build, and is what every image before this one produced:
+# `isMultiplayerConfigured()` sees two blank strings and the menu keeps offering
+# the simulated race in place of online rooms.
+ARG VITE_SUPABASE_URL=""
+ARG VITE_SUPABASE_PUBLISHABLE_KEY=""
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
+    VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
 
 # `tsc && vite build`: the type-check fails the image build the same way it
 # fails CI, so an image cannot be built from a tree that does not compile.
