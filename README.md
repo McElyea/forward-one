@@ -45,6 +45,21 @@ docker run --rm -p 8080:8080 forward-one
 
 Then open <http://localhost:8080>.
 
+Online rooms need their two values at **build** time, because Vite compiles them
+into the bundle — a built image cannot be reconfigured by setting variables on
+the container:
+
+```bash
+docker build -t forward-one \
+  --build-arg VITE_SUPABASE_URL=https://your-project-ref.supabase.co \
+  --build-arg VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_key .
+```
+
+Both are public: they ship inside the bundle every visitor downloads, and the
+migrations' row-level security is what protects the data. Pass the
+**publishable** key, never a secret or service-role key. Built without them, the
+image serves the simulated race exactly as before.
+
 The server listens on **8080** as an unprivileged user, so it needs no root and no added capability. It answers `GET /healthz` with a fixed `200` for container healthchecks, fingerprinted `/assets` are served `immutable` while `index.html` is `no-cache`, and TLS and security headers are left to whatever reverse proxy sits in front — [`docker/nginx.conf`](docker/nginx.conf) says why for each. The container itself keeps no state and needs no volume or database. Online rooms use Supabase when its two public Vite variables are supplied during the build.
 
 Kokoro is a development-only dependency. Its 82M-parameter model is used only by `npm run voice:generate`; players receive small WAV clips and never download the model.
