@@ -130,7 +130,7 @@ declare
   room_id uuid;
   room_code text;
 begin
-  if player_id is null then raise exception 'Sign in before creating a room'; end if;
+  if current_player_id is null then raise exception 'Sign in before creating a room'; end if;
   if p_level_id not in ('class-ii', 'class-iii', 'class-iv', 'class-v') then
     raise exception 'Unknown river level';
   end if;
@@ -147,7 +147,7 @@ begin
     room_code := public.new_race_room_code();
     begin
       insert into public.race_rooms (code, level_id, max_players, host_player_id)
-      values (room_code, p_level_id, p_max_players, player_id)
+      values (room_code, p_level_id, p_max_players, current_player_id)
       returning id into room_id;
       exit;
     exception when unique_violation then
@@ -158,7 +158,7 @@ begin
   if room_id is null then raise exception 'Could not allocate a unique room code'; end if;
 
   insert into public.race_room_members (room_id, player_id, player_name, color_index)
-  values (room_id, player_id, trim(p_player_name), 0);
+  values (room_id, current_player_id, trim(p_player_name), 0);
 
   return public.race_room_payload(room_id);
 end
@@ -171,7 +171,7 @@ security definer
 set search_path = ''
 as $$
 declare
-  player_id uuid := (select auth.uid());
+  current_player_id uuid := (select auth.uid());
   room public.race_rooms%rowtype;
   member_count integer;
 begin

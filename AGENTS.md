@@ -85,9 +85,9 @@ Class-field initializers therefore run exactly once, at construction — never a
 second visit.
 
 This means any mutable scene state must be reset in `init()`, not by a field initializer.
-`RiverScene.init()` (`src/game/scenes/RiverScene.ts:120`) is the reference: it reassigns
+`RiverScene.init()` (`src/game/scenes/RiverScene.ts:127`) is the reference: it reassigns
 every field it owns on entry, down to the `layoutAppliers` array of placement closures.
-`MenuScene.init()` (`src/game/scenes/MenuScene.ts:46`) does the same for the put-in screen.
+`MenuScene.init()` (`src/game/scenes/MenuScene.ts:57`) does the same for the put-in screen.
 
 `MenuScene` is also the worked example of what happens without one. It had no `init()` until
 [#11](https://github.com/McElyea/forward-one/pull/11), so `create()` pushed four more level

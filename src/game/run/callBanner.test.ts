@@ -25,16 +25,16 @@ describe('callBanner with a call in flight', () => {
   it('names the direction and the stroke count', () => {
     const banner = callBanner('aboard', { direction: 'forward', strokes: 2, obstacle: 'rapid' })
 
-    expect(banner.headline).toBe('FORWARD 2!')
-    expect(banner.subtext).toBe('WAVE TRAIN AHEAD  /  FORWARD ONLY')
+    expect(banner.headline).toBe('FORWARD ×2')
+    expect(banner.subtext).toBe('WAVE TRAIN AHEAD')
     expect(banner.tone).toBe('forward')
   })
 
-  it('calls a backwards stroke BACKWARDS, in both lines', () => {
+  it('calls a backwards stroke BACKWARDS without repeating it in the obstacle line', () => {
     const banner = callBanner('aboard', { direction: 'backward', strokes: 3, obstacle: 'rock' })
 
-    expect(banner.headline).toBe('BACKWARDS 3!')
-    expect(banner.subtext).toBe('ROCK AHEAD  /  BACKWARDS ONLY')
+    expect(banner.headline).toBe('BACKWARDS ×3')
+    expect(banner.subtext).toBe('ROCK AHEAD')
     expect(banner.tone).toBe('backward')
   })
 
@@ -54,7 +54,7 @@ describe('callBanner with a call in flight', () => {
   it('still asks for strokes once the river has won, so the last frame reads sanely', () => {
     const banner = callBanner('swept-away', { direction: 'forward', strokes: 1, obstacle: 'rock' })
 
-    expect(banner.headline).toBe('FORWARD 1!')
+    expect(banner.headline).toBe('FORWARD ×1')
   })
 })
 

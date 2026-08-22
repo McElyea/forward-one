@@ -57,10 +57,10 @@ export function callBanner(state: RiverState, call: BannerCall | undefined): Cal
   const strokes = `${call.strokes} ${call.strokes === 1 ? 'STROKE' : 'STROKES'}`
 
   return {
-    headline: `${direction} ${call.strokes}!`,
+    headline: `${direction} ×${call.strokes}`,
     subtext: overboard
       ? `SWIM TO THE RAFT  /  ${strokes}`
-      : `${obstacleLabel(call.obstacle)} AHEAD  /  ${direction} ONLY`,
+      : `${obstacleLabel(call.obstacle)} AHEAD`,
     tone: call.direction,
   }
 }

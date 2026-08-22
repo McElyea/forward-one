@@ -254,9 +254,9 @@ describe('the README stays in step with the rules the code enforces', () => {
     ).toEqual(boundTo('onBackwardPaddle'))
 
     expect(readme, 'the README stopped saying how to leave a run').toContain(
-      'Escape returns to the menu',
+      'Escape pauses the run',
     )
-    expect(bound.get('ESC'), 'Escape no longer returns to the menu').toBe('returnToMenu')
+    expect(bound.get('ESC'), 'Escape no longer opens the pause screen').toBe('togglePause')
   })
 })
 

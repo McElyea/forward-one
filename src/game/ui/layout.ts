@@ -84,6 +84,8 @@ export function descriptionLineSpacing(body: number): number {
 
 export interface MenuLayout {
   mode: LayoutMode
+  /** Desktop gives the brand and setup their own columns; compact screens stack them. */
+  split: boolean
   width: number
   height: number
   type: Typography
@@ -91,6 +93,8 @@ export interface MenuLayout {
   title: Point
   subtitle: Point
   brand: Point
+  heroBody: Rect
+  setupPanel: Rect
   sectionLabel: Point
   cards: Rect[]
   cardColumns: number
@@ -100,6 +104,10 @@ export interface MenuLayout {
   modeButtons: [Rect, Rect]
   voicePanel: Rect
   voiceButtons: Rect[]
+  startButton: Rect
+  howToPlayButton: Rect
+  howToPlayPanel: Rect
+  howToPlayCloseButton: Rect
   hint: Point
 }
 
@@ -112,44 +120,102 @@ export function menuLayout(
   const mode = layoutMode(width, height)
   const type = typography(width, height)
   const g = gutter(width, height)
-  const contentWidth = width - g * 2
   const gap = round(clamp(g * 0.5, 8, 16))
+  const split = mode === 'landscape' && width >= 1_000 && height >= 620
+  const compactLandscape = mode === 'landscape' && !split
+  const startHeight = round(clamp(height * 0.095, MIN_TOUCH_PX + 12, 82))
+  const modeHeight = round(clamp(height * 0.075, MIN_TOUCH_PX, 64))
+  const voiceHeight = round(clamp(height * 0.105, MIN_TOUCH_PX + type.label * 2.65, 96))
 
-  // --- Header, measured downward from the top edge.
+  const setupPanel: Rect = split
+    ? {
+        x: round(width * 0.47),
+        y: g,
+        width: round(width - width * 0.47 - g),
+        height: round(height - g * 2),
+      }
+    : { x: 0, y: 0, width, height }
+  const panelPad = split ? round(clamp(setupPanel.width * 0.035, 18, 28)) : g
+  const contentX = setupPanel.x + panelPad
+  const contentWidth = setupPanel.width - panelPad * 2
   const titleY = g
-  const subtitleY = titleY + type.hero * 1.05
-  const sectionY = subtitleY + type.heading * 2
-  const headerBottom = sectionY + type.heading * 1.7
+  const subtitleY = split
+    ? round(height * 0.25)
+    : compactLandscape
+      ? round(g + type.hero * 0.08)
+      : round(g + type.hero * 0.92)
+  const sectionY = split
+    ? round(setupPanel.y + panelPad)
+    : compactLandscape
+      ? round(g + type.hero * 1.08)
+      : round(subtitleY + type.heading * 2.45)
+  const headerBottom = round(sectionY + type.heading * (split ? 1.9 : 1.35))
 
-  // --- Bottom stack, measured upward from the bottom edge, because the
-  // controls have to stay under the player's thumb whatever else gives.
-  const hintHeight = round(type.label * 2)
-  const buttonHeight = round(clamp(height * 0.09, MIN_TOUCH_PX + 12, 72))
-  const voiceHeight = round(Math.max(buttonHeight, MIN_TOUCH_PX) + type.label * 2.2)
-  // A landscape phone has no vertical room to stack these, so they share a row.
-  const controlsRowHeight =
-    mode === 'landscape' ? Math.max(buttonHeight, voiceHeight) : buttonHeight + gap + voiceHeight
-  const controlsTop = height - g - hintHeight - controlsRowHeight
+  const startButton: Rect = {
+    x: round(contentX),
+    y: round(setupPanel.y + setupPanel.height - panelPad - startHeight),
+    width: round(contentWidth),
+    height: startHeight,
+  }
+  const hintY = round(startButton.y - gap - type.label * 1.25)
+  const controlsBottom = round(hintY - gap)
 
-  // --- Cards take what is left over, after reserving the description block a
-  // floor. Sizing them from width alone is what used to push the description
-  // off a short screen.
-  // The description block is a label line above the description itself, so the
-  // reserve has to hold both. Two body lines alone left the label out of the
-  // sum, which is how the description ended up under the mode buttons.
+  let modeButtons: [Rect, Rect]
+  let voicePanel: Rect
+  let controlsTop: number
+  if (compactLandscape) {
+    const modeBlockWidth = round((contentWidth - gap) * 0.44)
+    const modeWidth = (modeBlockWidth - gap) / 2
+    controlsTop = round(controlsBottom - Math.max(modeHeight, voiceHeight))
+    modeButtons = [
+      { x: contentX, y: controlsTop, width: round(modeWidth), height: modeHeight },
+      {
+        x: round(contentX + modeWidth + gap),
+        y: controlsTop,
+        width: round(modeWidth),
+        height: modeHeight,
+      },
+    ]
+    voicePanel = {
+      x: round(contentX + modeBlockWidth + gap),
+      y: controlsTop,
+      width: round(contentWidth - modeBlockWidth - gap),
+      height: voiceHeight,
+    }
+  } else {
+    voicePanel = {
+      x: contentX,
+      y: round(controlsBottom - voiceHeight),
+      width: round(contentWidth),
+      height: voiceHeight,
+    }
+    const modeTop = round(voicePanel.y - gap - modeHeight)
+    const modeWidth = (contentWidth - gap) / 2
+    controlsTop = modeTop
+    modeButtons = [
+      { x: contentX, y: modeTop, width: round(modeWidth), height: modeHeight },
+      {
+        x: round(contentX + modeWidth + gap),
+        y: modeTop,
+        width: round(modeWidth),
+        height: modeHeight,
+      },
+    ]
+  }
+
+  const cardColumns = mode === 'landscape' ? Math.min(levelCount, 4) : 2
+  const cardRows = Math.ceil(levelCount / cardColumns)
+  const cardWidth = (contentWidth - gap * (cardColumns - 1)) / cardColumns
   const descriptionLines = contentWidth >= type.body * 0.47 * 70 ? 1 : 2
   const descriptionHeight =
     type.body * LINE_HEIGHT * descriptionLines +
     descriptionLineSpacing(type.body) * (descriptionLines - 1)
   const detailMin = round(type.body * 1.25 + descriptionHeight)
-  const cardColumns = mode === 'landscape' ? Math.min(levelCount, 4) : 2
-  const cardRows = Math.ceil(levelCount / cardColumns)
-  const cardWidth = (contentWidth - gap * (cardColumns - 1)) / cardColumns
   const cardsAvailable = controlsTop - gap - detailMin - gap - headerBottom
   const cardHeight = clamp(
-    Math.min((cardsAvailable - gap * (cardRows - 1)) / cardRows, cardWidth * 1.2),
-    MIN_TOUCH_PX + 16,
-    mode === 'landscape' ? 148 : 124,
+    Math.min((cardsAvailable - gap * (cardRows - 1)) / cardRows, cardWidth * 1.14),
+    MIN_TOUCH_PX + 10,
+    split ? 172 : mode === 'landscape' ? 112 : 124,
   )
 
   const cards: Rect[] = []
@@ -157,7 +223,7 @@ export function menuLayout(
     const column = index % cardColumns
     const row = Math.floor(index / cardColumns)
     cards.push({
-      x: round(g + column * (cardWidth + gap)),
+      x: round(contentX + column * (cardWidth + gap)),
       y: round(headerBottom + row * (cardHeight + gap)),
       width: round(cardWidth),
       height: round(cardHeight),
@@ -166,34 +232,18 @@ export function menuLayout(
 
   const cardsBottom = headerBottom + cardRows * cardHeight + (cardRows - 1) * gap
   const detailTop = cardsBottom + gap
+  const detailHeight = round(Math.max(type.body * 2, controlsTop - gap - detailTop))
+  const detailLabel = round(
+    clamp((detailHeight - descriptionHeight) / 1.25, type.body, type.title),
+  )
 
-  // --- Controls row.
-  const modeBlockWidth = mode === 'landscape' ? (contentWidth - gap) * 0.46 : contentWidth
-  const modeWidth = (modeBlockWidth - gap) / 2
-  const modeTop = controlsTop
-
-  const voicePanel: Rect =
-    mode === 'landscape'
-      ? {
-          x: round(g + modeBlockWidth + gap),
-          y: round(controlsTop),
-          width: round(contentWidth - modeBlockWidth - gap),
-          height: voiceHeight,
-        }
-      : {
-          x: round(g),
-          y: round(controlsTop + buttonHeight + gap),
-          width: round(contentWidth),
-          height: voiceHeight,
-        }
-
-  const voiceInnerPad = round(clamp(g * 0.4, 8, 14))
+  const voiceInnerPad = round(clamp(g * 0.35, 7, 13))
   const voiceGap = 6
   const voiceButtonWidth =
     (voicePanel.width - voiceInnerPad * 2 - voiceGap * (voiceCount - 1)) / voiceCount
   const voiceButtonHeight = Math.max(
     MIN_TOUCH_PX,
-    voicePanel.height - type.label * 1.9 - voiceInnerPad,
+    voicePanel.height - type.label * 1.55 - voiceInnerPad,
   )
   const voiceButtons: Rect[] = []
   for (let index = 0; index < voiceCount; index += 1) {
@@ -205,47 +255,72 @@ export function menuLayout(
     })
   }
 
-  // The label used to be `type.title` whatever the room. It now takes what the
-  // region has left after the description, down to body size.
-  const detailHeight = round(Math.max(type.body * 2, controlsTop - gap - detailTop))
-  // The longest level description runs about 70 characters, and condensed body
-  // text averages a little under half its size per character, so this is where
-  // the description stops needing a second line.
-  const detailLabel = round(
-    clamp((detailHeight - descriptionHeight) / 1.25, type.body, type.title),
-  )
+  const howToPlayButton: Rect = split
+    ? {
+        x: g,
+        y: round(height - g - Math.max(MIN_TOUCH_PX + 10, type.heading * 2.3)),
+        width: round(clamp(width * 0.16, 180, 240)),
+        height: round(Math.max(MIN_TOUCH_PX + 10, type.heading * 2.3)),
+      }
+    : {
+        x: round(width - g - MIN_TOUCH_PX),
+        y: round(sectionY - (MIN_TOUCH_PX - type.heading) / 2),
+        width: MIN_TOUCH_PX,
+        height: MIN_TOUCH_PX,
+      }
+  const howToPlayPanelWidth = round(Math.min(width - g * 2, 720))
+  const howToPlayPanelHeight = round(Math.min(height - g * 2, 440))
+  const howToPlayPanel: Rect = {
+    x: round((width - howToPlayPanelWidth) / 2),
+    y: round((height - howToPlayPanelHeight) / 2),
+    width: howToPlayPanelWidth,
+    height: howToPlayPanelHeight,
+  }
+  const howToPlayCloseButton: Rect = {
+    x: round(howToPlayPanel.x + howToPlayPanel.width * 0.16),
+    y: round(howToPlayPanel.y + howToPlayPanel.height - panelPad - Math.max(52, modeHeight)),
+    width: round(howToPlayPanel.width * 0.68),
+    height: round(Math.max(52, modeHeight)),
+  }
 
   return {
     mode,
+    split,
     width,
     height,
     type,
     gutter: g,
-    brand: { x: g, y: round(titleY) },
-    title: { x: g, y: round(titleY) },
-    subtitle: { x: g, y: round(subtitleY) },
-    sectionLabel: { x: g, y: round(sectionY) },
+    brand: { x: g, y: titleY },
+    title: { x: g, y: titleY },
+    subtitle: {
+      x: compactLandscape ? round(g + type.hero * 3.55) : g,
+      y: subtitleY,
+    },
+    heroBody: {
+      x: g,
+      y: round(subtitleY + type.hero * 2.05),
+      width: split ? round(setupPanel.x - g * 2) : 0,
+      height: round(type.body * 4.5),
+    },
+    setupPanel,
+    sectionLabel: { x: contentX, y: sectionY },
     cards,
     cardColumns,
     detail: {
-      x: round(g),
+      x: contentX,
       y: round(detailTop),
       width: round(contentWidth),
       height: detailHeight,
     },
     detailLabel,
-    modeButtons: [
-      { x: round(g), y: round(modeTop), width: round(modeWidth), height: buttonHeight },
-      {
-        x: round(g + modeWidth + gap),
-        y: round(modeTop),
-        width: round(modeWidth),
-        height: buttonHeight,
-      },
-    ],
+    modeButtons,
     voicePanel,
     voiceButtons,
-    hint: { x: g, y: round(height - g - hintHeight * 0.85) },
+    startButton,
+    howToPlayButton,
+    howToPlayPanel,
+    howToPlayCloseButton,
+    hint: { x: contentX, y: hintY },
   }
 }
 
@@ -464,13 +539,17 @@ export interface RiverLayout {
    * them translucent so the water still reads underneath.
    */
   controlsOverlay: boolean
+  railVisible: boolean
   topBar: Rect
+  pauseButton: Rect
   river: Rect
   rail: Rect
   railAxis: RailAxis
   rhythmLane: Rect
   /** Where a stroke must be played, in absolute x within the lane. */
   targetX: number
+  gateLabel: Point
+  laneHint: Point
   controls: { forward: Rect; backward: Rect }
   call: Point
   callSub: Point
@@ -479,21 +558,45 @@ export interface RiverLayout {
   survivalStatus: Point
   timeText: Point
   statsText: Point
+  modalPanel: Rect
+  modalPrimaryButton: Rect
+  modalSecondaryButton: Rect
 }
 
-export function riverLayout(width: number, height: number): RiverLayout {
+export function riverLayout(width: number, height: number, railVisible = true): RiverLayout {
   const mode = layoutMode(width, height)
   const type = typography(width, height)
   const g = gutter(width, height)
   const controlGap = round(clamp(g * 0.5, 8, 16))
+  const modalWidth = round(Math.min(width - g * 2, 620))
+  const modalHeight = round(Math.min(height - g * 2, 440))
+  const modalPanel: Rect = {
+    x: round((width - modalWidth) / 2),
+    y: round((height - modalHeight) / 2),
+    width: modalWidth,
+    height: modalHeight,
+  }
+  const modalButtonHeight = round(clamp(height * 0.08, 52, 66))
+  const modalSecondaryButton: Rect = {
+    x: round(modalPanel.x + modalPanel.width * 0.14),
+    y: round(modalPanel.y + modalPanel.height - g - modalButtonHeight),
+    width: round(modalPanel.width * 0.72),
+    height: modalButtonHeight,
+  }
+  const modalPrimaryButton: Rect = {
+    ...modalSecondaryButton,
+    y: round(modalSecondaryButton.y - controlGap - modalButtonHeight),
+  }
 
   // A phone held sideways has so little height that stacking everything leaves
   // the world a letterbox slit. Float the controls instead.
   const controlsOverlay = mode === 'landscape' && height < 520
 
   if (controlsOverlay) {
-    const topBarHeight = round(clamp(height * 0.1, type.heading * 2, 54))
-    const railThickness = round(clamp(width * 0.11, 84, 150))
+    const topBarHeight = round(
+      clamp(height * 0.1, Math.max(type.heading * 2, MIN_TOUCH_PX + 8), 60),
+    )
+    const railThickness = railVisible ? round(clamp(width * 0.11, 84, 150)) : 0
     const river: Rect = {
       x: 0,
       y: topBarHeight,
@@ -505,6 +608,7 @@ export function riverLayout(width: number, height: number): RiverLayout {
     const controlWidth = round(clamp(width * 0.15, MIN_TOUCH_PX + 24, 150))
     const bottom = height - g * 0.55
     const edge = round(g * 0.4)
+    const pauseSize = round(clamp(topBarHeight * 0.68, MIN_TOUCH_PX, 54))
 
     const rhythmLane: Rect = {
       x: round(river.x + controlWidth + controlGap + edge),
@@ -513,6 +617,8 @@ export function riverLayout(width: number, height: number): RiverLayout {
       height: laneHeight,
     }
 
+    const targetX = round(rhythmLane.x + rhythmLane.width * 0.5)
+
     return {
       mode,
       width,
@@ -520,7 +626,14 @@ export function riverLayout(width: number, height: number): RiverLayout {
       type,
       gutter: g,
       controlsOverlay,
+      railVisible,
       topBar: { x: 0, y: 0, width: round(width), height: topBarHeight },
+      pauseButton: {
+        x: round(width - g - pauseSize),
+        y: round((topBarHeight - pauseSize) / 2),
+        width: pauseSize,
+        height: pauseSize,
+      },
       river,
       rail: {
         x: round(width - railThickness),
@@ -530,7 +643,12 @@ export function riverLayout(width: number, height: number): RiverLayout {
       },
       railAxis: 'vertical',
       rhythmLane,
-      targetX: round(rhythmLane.x + rhythmLane.width * 0.28),
+      targetX,
+      gateLabel: { x: targetX, y: round(rhythmLane.y + type.label * 0.8) },
+      laneHint: {
+        x: round(rhythmLane.x + g * 0.55),
+        y: round(rhythmLane.y + rhythmLane.height - type.label * 0.55),
+      },
       controls: {
         forward: {
           x: round(river.x + edge),
@@ -553,8 +671,11 @@ export function riverLayout(width: number, height: number): RiverLayout {
       feedback: { x: round(river.x + river.width / 2), y: round(river.y + river.height * 0.56) },
       raft: { x: round(river.x + river.width / 2), y: round(river.y + river.height * 0.42) },
       survivalStatus: { x: round(river.x + g), y: round(river.y + g * 0.7) },
-      timeText: { x: round(g), y: round(topBarHeight * 0.5) },
-      statsText: { x: round(width - g), y: round(topBarHeight * 0.5) },
+      timeText: { x: round(width / 2), y: round(topBarHeight * 0.5) },
+      statsText: { x: round(width - g - pauseSize - g * 0.55), y: round(topBarHeight * 0.5) },
+      modalPanel,
+      modalPrimaryButton,
+      modalSecondaryButton,
     }
   }
 
@@ -572,7 +693,9 @@ export function riverLayout(width: number, height: number): RiverLayout {
   // The rival rail runs down the right edge in landscape, and across the top
   // in portrait where horizontal space is the scarce axis.
   const railThickness =
-    mode === 'landscape'
+    !railVisible
+      ? 0
+      : mode === 'landscape'
       ? round(clamp(width * 0.17, 120, 240))
       : round(clamp(height * 0.055, 40, 72))
 
@@ -614,6 +737,8 @@ export function riverLayout(width: number, height: number): RiverLayout {
   }
 
   const controlWidth = (width - g - controlGap) / 2
+  const pauseSize = round(clamp(topBarHeight * 0.62, MIN_TOUCH_PX, 58))
+  const targetX = round(rhythmLane.x + rhythmLane.width * 0.5)
 
   return {
     mode,
@@ -622,13 +747,24 @@ export function riverLayout(width: number, height: number): RiverLayout {
     type,
     gutter: g,
     controlsOverlay,
+    railVisible,
     topBar: { x: 0, y: 0, width: round(width), height: topBarHeight },
+    pauseButton: {
+      x: round(width - g - pauseSize),
+      y: round((topBarHeight - pauseSize) / 2),
+      width: pauseSize,
+      height: pauseSize,
+    },
     river,
     rail,
     railAxis: mode === 'landscape' ? 'vertical' : 'horizontal',
     rhythmLane,
-    // A third of the way in, so approaching markers have room to travel.
-    targetX: round(rhythmLane.x + rhythmLane.width * 0.28),
+    targetX,
+    gateLabel: { x: targetX, y: round(rhythmLane.y + type.label * 0.8) },
+    laneHint: {
+      x: round(rhythmLane.x + g * 0.55),
+      y: round(rhythmLane.y + rhythmLane.height - type.label * 0.55),
+    },
     controls: {
       forward: {
         x: round(g * 0.5),
@@ -651,7 +787,10 @@ export function riverLayout(width: number, height: number): RiverLayout {
     feedback: { x: round(river.x + river.width / 2), y: round(river.y + river.height * 0.72) },
     raft: { x: round(river.x + river.width / 2), y: round(river.y + river.height * 0.55) },
     survivalStatus: { x: round(river.x + g), y: round(river.y + g * 0.7) },
-    timeText: { x: round(g), y: round(topBarHeight * 0.5) },
-    statsText: { x: round(width - g), y: round(topBarHeight * 0.5) },
+    timeText: { x: round(width / 2), y: round(topBarHeight * 0.5) },
+    statsText: { x: round(width - g - pauseSize - g * 0.55), y: round(topBarHeight * 0.5) },
+    modalPanel,
+    modalPrimaryButton,
+    modalSecondaryButton,
   }
 }
