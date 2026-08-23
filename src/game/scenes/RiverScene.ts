@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import raftTopDownUrl from '../../assets/raft-top-down.png'
 import {
   getSelectedGuideVoiceId,
   guideAudioKey,
@@ -12,10 +13,11 @@ import type { HostedRaceSession } from '../race/HostedRaceSession'
 import type { RaceAdapter } from '../race/RaceAdapter'
 import { spreadRailLabels } from '../race/railLabels'
 import { rankRacers } from '../race/rankRacers'
+import { raceClockMs, raceElapsedMs, raceTimeExpired } from '../race/raceRules'
 import { selectRailRacers } from '../race/selectRailRacers'
 import { RhythmEngine } from '../rhythm/RhythmEngine'
 import { callBanner, obstacleLabel, type BannerTone } from '../run/callBanner'
-import { placeOfLocal, runOutcome } from '../run/runOutcome'
+import { placeOfLocal, runOutcome, timeLimitOutcome } from '../run/runOutcome'
 import {
   SurvivalEngine,
   type SurvivalTransition,
@@ -29,6 +31,7 @@ import type {
   StrokeRating,
 } from '../types'
 import { riverLayout, type RiverLayout } from '../ui/layout'
+import { obstacleLaneTarget, raftDodgeCueIndex, raftLaneCrossingDuration, raftLaneTarget, raftLaneTravel } from '../ui/raftMotion'
 import { formatRunClock } from '../ui/runClock'
 import {
   bodyStyle,
@@ -55,7 +58,9 @@ const RATING_COLOR: Record<StrokeRating, string> = {
 
 const LOOK_AHEAD_MS = 2_200
 const SCHEDULE_AHEAD_MS = LOOK_AHEAD_MS + 2_000
+const CALL_LEAD_MS = 1_500
 const MAX_VISIBLE_RAIL_RACERS = 8
+const RAFT_TEXTURE_KEY = 'raft-top-down'
 
 const clamp = (value: number): number => Math.max(0, Math.min(1, value))
 
@@ -89,6 +94,10 @@ export class RiverScene extends Phaser.Scene {
   private paused = false
   private pausedAt = 0
   private returningToMenu = false
+  private raftLaneMotion = { position: 0, lean: 0 }
+  private raftStrokeMotion = { offsetY: 0 }
+  private lastRaftCueIndex = -1
+  private raftDisplayHeight = 120
   private riverGraphics!: Phaser.GameObjects.Graphics
   private rhythmGraphics!: Phaser.GameObjects.Graphics
   private raceGraphics!: Phaser.GameObjects.Graphics
@@ -122,6 +131,7 @@ export class RiverScene extends Phaser.Scene {
 
   preload(): void {
     loadGuideAudio(this)
+    this.load.image(RAFT_TEXTURE_KEY, raftTopDownUrl)
   }
 
   init(data: RiverSceneData): void {
@@ -137,6 +147,10 @@ export class RiverScene extends Phaser.Scene {
     this.paused = false
     this.pausedAt = 0
     this.returningToMenu = false
+    this.raftLaneMotion = { position: 0, lean: 0 }
+    this.raftStrokeMotion = { offsetY: 0 }
+    this.lastRaftCueIndex = -1
+    this.raftDisplayHeight = 120
     this.guideVoiceId = getSelectedGuideVoiceId()
     this.racers = []
     this.raceLabels = new Map<string, Phaser.GameObjects.Text>()
@@ -183,7 +197,7 @@ export class RiverScene extends Phaser.Scene {
     if (this.completed || this.paused) return
 
     const elapsed = time - this.startAt
-    const activeElapsed = Math.max(0, elapsed)
+    const activeElapsed = raceElapsedMs(this.mode, elapsed)
     const scheduled = this.survival.ensureScheduledThrough(activeElapsed + SCHEDULE_AHEAD_MS)
     for (const event of scheduled) this.rhythm.addCue(event.cue)
     const missed = this.rhythm.expire(activeElapsed)
@@ -219,35 +233,31 @@ export class RiverScene extends Phaser.Scene {
     this.updateRaft(activeElapsed)
     this.updateHud(activeElapsed, elapsed < 0)
 
-    if (survival.state === 'swept-away') this.finishRace(activeElapsed)
+    if (survival.state === 'swept-away') {
+      this.finishRace(activeElapsed)
+    } else if (raceTimeExpired(this.mode, elapsed)) {
+      this.finishRace(activeElapsed, true)
+    }
   }
 
   private createRaft(): void {
-    const raftBody = this.add.graphics()
-    const crew = this.add.graphics()
-    this.raft = this.add.container(this.layout.raft.x, this.layout.raft.y, [raftBody, crew])
+    const raftSprite = this.add.image(0, 0, RAFT_TEXTURE_KEY)
+    this.raft = this.add.container(this.layout.raft.x, this.layout.raft.y, [raftSprite])
     this.raft.setDepth(5)
     this.swimmer = this.add.graphics().setDepth(6).setVisible(false)
 
     this.onLayout((layout) => {
-      // The raft scales with the river so it stays legible on a phone without
-      // swallowing the channel on a desktop.
       const s = Phaser.Math.Clamp(Math.min(layout.river.width, layout.river.height) / 640, 0.55, 1.25)
-      raftBody.clear()
-      raftBody.fillStyle(0xf05a3d, 1)
-      raftBody.fillRoundedRect(-46 * s, -24 * s, 92 * s, 48 * s, 21 * s)
-      raftBody.lineStyle(5 * s, 0xffa56e, 1)
-      raftBody.strokeRoundedRect(-42 * s, -20 * s, 84 * s, 40 * s, 18 * s)
-      raftBody.fillStyle(0x17343a, 1)
-      raftBody.fillEllipse(0, 0, 59 * s, 24 * s)
-
-      crew.clear()
-      crew.fillStyle(0xffc857, 1)
-      crew.fillCircle(-19 * s, -5 * s, 6 * s)
-      crew.fillCircle(19 * s, -5 * s, 6 * s)
-      crew.fillStyle(0xf5f1df, 1)
-      crew.fillCircle(-19 * s, 9 * s, 5 * s)
-      crew.fillCircle(19 * s, 9 * s, 5 * s)
+      const displayHeight = Phaser.Math.Clamp(
+        Math.min(layout.river.height * 0.46, layout.river.width * 0.48),
+        110,
+        220,
+      )
+      this.raftDisplayHeight = displayHeight
+      raftSprite.setDisplaySize(
+        displayHeight * (raftSprite.width / raftSprite.height),
+        displayHeight,
+      )
 
       this.swimmer.clear()
       this.swimmer.fillStyle(COLORS.yellow, 1)
@@ -678,7 +688,7 @@ export class RiverScene extends Phaser.Scene {
     const raftX = this.raft.x
     const wakeOffset = flowDistance % 27
     for (let i = 0; i < 5; i += 1) {
-      const y = this.raft.y + river.height * 0.053 + i * 24 + wakeOffset
+      const y = this.raft.y + this.raftDisplayHeight * 0.43 + i * 24 + wakeOffset
       if (y > river.y + river.height * 0.85) continue
       const spread = 30 + i * 8
       graphics.lineStyle(3, COLORS.cream, 0.42 - i * 0.045)
@@ -702,12 +712,12 @@ export class RiverScene extends Phaser.Scene {
     const obstacleSize = Math.min(river.width, river.height) * 0.045
 
     for (const event of this.survival.getVisibleEvents(elapsed)) {
-      const lead = event.cue.at - elapsed
-      const y = raft.y - (lead / 2_800) * upstreamDistance
+      const lead = event.collisionAt - elapsed
+      const y = raft.y - this.raftDisplayHeight * 0.46 - (lead / 2_800) * upstreamDistance
       if (y < river.y || y > river.y + river.height) continue
 
-      const lane = ((event.cueIndex * 37) % 5 - 2) / 2
-      const x = raft.x + lane * river.width * 0.16
+      const obstacleLane = obstacleLaneTarget(event.cueIndex)
+      const x = raft.x + obstacleLane * raftLaneTravel(river.width)
       const alpha = Phaser.Math.Clamp(1 + lead / 2_800, 0.28, 1)
       const size = obstacleSize * (0.86 + (event.cueIndex % 3) * 0.12)
 
@@ -947,8 +957,7 @@ export class RiverScene extends Phaser.Scene {
   }
 
   private updateCue(elapsed: number): void {
-    const leadTime = 1_500
-    const event = this.survival.getCurrentCall(elapsed, leadTime)
+    const event = this.survival.getCurrentCall(elapsed, CALL_LEAD_MS)
 
     if (!event && elapsed <= 0) return
 
@@ -985,10 +994,13 @@ export class RiverScene extends Phaser.Scene {
   private updateRaft(elapsed: number): void {
     const { raft, river } = this.layout
     const survival = this.survival.getSnapshot(elapsed)
-    const wave = Math.sin(elapsed * 0.004 * survival.intensity)
-    const sway = Math.sin(elapsed * 0.0013 * survival.intensity) * (river.width * 0.073)
-    this.raft.setPosition(raft.x + sway, raft.y + wave * 8)
-    this.raft.setRotation(wave * 0.055 * Math.min(1.5, survival.intensity))
+    const bob = Math.sin(elapsed * 0.004 * survival.intensity) * 3
+
+    this.raft.setPosition(
+      raft.x + this.raftLaneMotion.position * raftLaneTravel(river.width),
+      raft.y + bob + this.raftStrokeMotion.offsetY,
+    )
+    this.raft.setRotation(this.raftLaneMotion.lean)
 
     const overboard = survival.state !== 'aboard'
     this.swimmer
@@ -1009,7 +1021,7 @@ export class RiverScene extends Phaser.Scene {
       this.callSubtext.setText('THE CLOCK STARTS TOGETHER')
     }
 
-    this.timeText.setText(formatRunClock(elapsed))
+    this.timeText.setText(formatRunClock(raceClockMs(this.mode, elapsed)))
     const accuracy = this.rhythm.getAccuracy()
     this.statsText.setText(
       this.layout.mode === 'landscape' && this.layout.width >= 760
@@ -1021,7 +1033,7 @@ export class RiverScene extends Phaser.Scene {
     if (survival.state === 'aboard') {
       this.survivalText
         .setText(
-          `RAFT ${survival.stability}/3  •  FLOW ${survival.intensity.toFixed(1)}×` +
+          `RAFT HP ${survival.stability}/3  •  FLOW ${survival.intensity.toFixed(1)}×` +
           (this.streak > 1 ? `  •  STREAK ×${this.streak}` : ''),
         )
         .setColor(TEXT_COLORS.cream)
@@ -1045,8 +1057,21 @@ export class RiverScene extends Phaser.Scene {
   private onPaddle(direction: PaddleDirection): void {
     if (this.completed || this.time.now < this.startAt) return
 
+    this.animateRaftStroke()
     const judgment = this.rhythm.judge(this.time.now - this.startAt, direction)
     this.applyJudgment(judgment)
+  }
+
+  private animateRaftStroke(): void {
+    this.tweens.killTweensOf(this.raftStrokeMotion)
+    this.raftStrokeMotion.offsetY = 0
+    this.tweens.add({
+      targets: this.raftStrokeMotion,
+      offsetY: -6,
+      duration: 110,
+      yoyo: true,
+      ease: 'Quad.out',
+    })
   }
 
   private applyJudgment(judgment: StrokeJudgment): void {
@@ -1056,25 +1081,49 @@ export class RiverScene extends Phaser.Scene {
     this.race.recordStroke(judgment)
     this.showFeedback(judgment.rating === 'wrong' ? 'WRONG WAY' : judgment.rating.toUpperCase(), judgment.rating)
 
-    if (judgment.target) {
-      this.tweens.add({
-        targets: this.raft,
-        y: this.raft.y - 16,
-        duration: 90,
-        yoyo: true,
-        ease: 'Quad.out',
-      })
-    }
+    const dodgeCueIndex = raftDodgeCueIndex(judgment, this.lastRaftCueIndex)
+    if (dodgeCueIndex !== undefined) this.moveRaftToLane(dodgeCueIndex)
+
+  }
+
+  private moveRaftToLane(cueIndex: number): void {
+    this.lastRaftCueIndex = cueIndex
+    const targetLane = raftLaneTarget(cueIndex)
+    const turnDirection = Math.sign(targetLane - this.raftLaneMotion.position) || targetLane
+    const crossingDuration = raftLaneCrossingDuration(
+      this.raftLaneMotion.position,
+      targetLane,
+    )
+
+    this.tweens.killTweensOf(this.raftLaneMotion)
+    this.raftLaneMotion.lean = 0
+    this.tweens.add({
+      targets: this.raftLaneMotion,
+      position: targetLane,
+      duration: crossingDuration,
+      ease: 'Sine.inOut',
+    })
+    this.tweens.add({
+      targets: this.raftLaneMotion,
+      lean: turnDirection * 0.045,
+      duration: 180,
+      hold: 120,
+      yoyo: true,
+      ease: 'Sine.inOut',
+    })
   }
 
   private handleSurvivalTransition(transition: SurvivalTransition): void {
     const obstacle = obstacleLabel(transition.event.obstacle)
 
     if (transition.type === 'impact') {
-      this.showFeedback(`${obstacle} HIT`, 'wrong')
+      const { stability } = this.survival.getSnapshot(0)
+      this.showFeedback(`${obstacle} HIT  •  HP ${stability}/3`, 'wrong')
+      this.flashRaftDamage()
       this.cameras.main.shake(180, 0.006)
     } else if (transition.type === 'ejected') {
-      this.showFeedback('THROWN OVERBOARD', 'wrong')
+      this.showFeedback('RAFT HP 0/3  •  OVERBOARD', 'wrong')
+      this.flashRaftDamage()
       this.cameras.main.shake(320, 0.012)
     } else if (transition.type === 'recovery-progress') {
       this.showFeedback('CLOSING ON THE RAFT', 'good')
@@ -1083,6 +1132,18 @@ export class RiverScene extends Phaser.Scene {
     } else if (transition.type === 'recovered') {
       this.showFeedback('BACK ABOARD', 'perfect')
     }
+  }
+
+  private flashRaftDamage(): void {
+    this.tweens.killTweensOf(this.raft)
+    this.raft.setAlpha(1)
+    this.tweens.add({
+      targets: this.raft,
+      alpha: 0.42,
+      duration: 70,
+      yoyo: true,
+      repeat: 2,
+    })
   }
 
   private showFeedback(label: string, rating: StrokeRating): void {
@@ -1129,16 +1190,18 @@ export class RiverScene extends Phaser.Scene {
     guideCall.play()
   }
 
-  private finishRace(elapsed: number): void {
+  private finishRace(elapsed: number, timeExpired = false): void {
     this.completed = true
     this.activeGuideCall?.stop()
     const sorted = rankRacers(this.racers)
-    const outcome = runOutcome(
-      this.mode,
-      placeOfLocal(sorted),
-      elapsed,
-      this.level.name,
-    )
+    const outcome = timeExpired
+      ? timeLimitOutcome(this.racers, elapsed, this.level.name)
+      : runOutcome(
+        this.mode,
+        placeOfLocal(sorted),
+        elapsed,
+        this.level.name,
+      )
     const headingLabel = outcome.heading
     const blurbLabel = outcome.blurb
 
@@ -1149,7 +1212,12 @@ export class RiverScene extends Phaser.Scene {
       .setDepth(50)
       .setStrokeStyle(2, 0x31545a, 1)
     const eyebrow = this.add
-      .text(0, 0, 'RUN COMPLETE', headingStyle(this.layout.type.label, TEXT_COLORS.muted))
+      .text(
+        0,
+        0,
+        timeExpired ? 'TIME EXPIRED' : 'RUN COMPLETE',
+        headingStyle(this.layout.type.label, TEXT_COLORS.muted),
+      )
       .setOrigin(0.5)
       .setDepth(51)
       .setLetterSpacing(2)

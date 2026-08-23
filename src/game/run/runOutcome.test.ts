@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { placeLabel, placeOfLocal, runOutcome } from './runOutcome'
+import { placeLabel, placeOfLocal, runOutcome, timeLimitOutcome } from './runOutcome'
 import type { RacerSnapshot } from '../types'
 
 const racer = (id: string, isLocal: boolean): RacerSnapshot => ({
@@ -78,5 +78,43 @@ describe('runOutcome', () => {
 
   it('names the level the run was actually on', () => {
     expect(runOutcome('solo', 1, 1_000, 'No Mistakes').blurb).toContain('on No Mistakes')
+  })
+})
+
+describe('timeLimitOutcome', () => {
+  it('declares the only connected survivor the winner', () => {
+    const local = racer('you', true)
+    const maya = { ...racer('maya', false), eliminated: true, survivalMs: 42_000 }
+
+    expect(timeLimitOutcome([local, maya], 60_000, 'Broken Water')).toMatchObject({
+      place: 1,
+      placeLabel: 'FIRST',
+      heading: 'YOU WIN',
+    })
+  })
+
+  it('declares a tie when multiple connected paddlers survive the minute', () => {
+    const outcome = timeLimitOutcome(
+      [racer('you', true), racer('maya', false), racer('eli', false)],
+      60_000,
+      'The Narrows',
+    )
+
+    expect(outcome).toMatchObject({
+      place: 1,
+      placeLabel: 'TIED',
+      heading: 'TIE FOR FIRST',
+    })
+    expect(outcome.blurb).toContain('3 paddlers were still afloat')
+  })
+
+  it('does not let a disconnected paddler turn a win into a tie', () => {
+    const disconnected = { ...racer('maya', false), connected: false }
+
+    expect(timeLimitOutcome(
+      [racer('you', true), disconnected],
+      60_000,
+      'Warm-up Run',
+    ).heading).toBe('YOU WIN')
   })
 })

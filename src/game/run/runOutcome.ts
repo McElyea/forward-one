@@ -1,4 +1,5 @@
 import type { RaceMode, RacerSnapshot } from '../types'
+import { timeLimitLeaders } from '../race/raceRules'
 
 /**
  * What a finished run says to the player.
@@ -60,4 +61,35 @@ export function runOutcome(
       ? `You survived ${seconds} seconds on ${levelName}. Read each obstacle and hold the line longer next run.`
       : `${label} after ${seconds} seconds on ${levelName}. The last paddler in the water wins.`,
   }
+}
+
+export function timeLimitOutcome(
+  racers: RacerSnapshot[],
+  elapsedMs: number,
+  levelName: string,
+): RunOutcome {
+  const leaders = timeLimitLeaders(racers)
+  const localIsLeader = leaders.some((racer) => racer.isLocal)
+  const seconds = Math.floor(Math.max(0, elapsedMs) / 1000)
+
+  if (localIsLeader && leaders.length > 1) {
+    return {
+      place: 1,
+      placeLabel: 'TIED',
+      heading: 'TIE FOR FIRST',
+      blurb: `Time expired after ${seconds} seconds on ${levelName}. ${leaders.length} paddlers were still afloat, so the race is a tie.`,
+    }
+  }
+
+  if (localIsLeader) {
+    return {
+      place: 1,
+      placeLabel: 'FIRST',
+      heading: 'YOU WIN',
+      blurb: `Time expired after ${seconds} seconds on ${levelName}. You were the only paddler still afloat.`,
+    }
+  }
+
+  const ranked = [...racers].sort((a, b) => b.survivalMs - a.survivalMs)
+  return runOutcome('multiplayer', placeOfLocal(ranked), elapsedMs, levelName)
 }
