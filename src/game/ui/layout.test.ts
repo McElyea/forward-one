@@ -433,11 +433,13 @@ describe('lobbyLayout', () => {
     const layout = lobbyLayout(width, height)
     const targets = [
       layout.nameInput,
+      layout.quickMatchButton,
       ...layout.capacityButtons,
       layout.createButton,
       layout.codeInput,
       layout.joinButton,
       ...layout.roomButtons,
+      layout.queueLeaveButton,
       layout.backButton,
     ]
 
@@ -457,6 +459,9 @@ describe('lobbyLayout', () => {
   it('stacks setup controls in portrait', () => {
     const layout = lobbyLayout(393, 852)
     expect(layout.mode).toBe('portrait')
+    expect(layout.quickMatchButton.y).toBeGreaterThan(
+      layout.nameInput.y + layout.nameInput.height,
+    )
     expect(layout.createButton.y).toBeGreaterThan(layout.nameInput.y + layout.nameInput.height)
     expect(layout.codeInput.y).toBeGreaterThan(layout.createButton.y + layout.createButton.height)
   })

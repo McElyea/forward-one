@@ -53,6 +53,8 @@ export class LobbyScene extends Phaser.Scene {
   private membersText!: Phaser.GameObjects.Text
   private readyButton!: LobbyButton
   private startButton!: LobbyButton
+  private copyButton!: LobbyButton
+  private leaveButton!: LobbyButton
   private localReady = false
   private busy = false
   private inRoom = false
@@ -159,7 +161,7 @@ export class LobbyScene extends Phaser.Scene {
     const capacityLabel = this.add.text(
       0,
       0,
-      'ROOM CAPACITY',
+      'PRIVATE ROOM CAPACITY',
       headingStyle(this.layout.type.heading, TEXT_COLORS.muted),
     ).setLetterSpacing(1)
     const joinLabel = this.add.text(
@@ -189,7 +191,8 @@ export class LobbyScene extends Phaser.Scene {
       this.capacityButtons.push({ ...button, capacity })
     }
 
-    this.createButton('CREATE ROOM', () => void this.createRoom(), this.setupObjects, true)
+    this.createButton('QUICK MATCH', () => void this.quickMatch(), this.setupObjects, true)
+    this.createButton('CREATE PRIVATE ROOM', () => void this.createRoom(), this.setupObjects)
     this.createButton('JOIN ROOM', () => void this.joinRoom(), this.setupObjects)
     this.createButton('BACK TO PUT-IN', () => this.scene.start('menu', { levelId: this.levelId }), this.setupObjects)
 
@@ -214,11 +217,20 @@ export class LobbyScene extends Phaser.Scene {
         .setPosition(layout.codeInput.x, layout.codeInput.y - layout.type.heading * 1.15)
         .setFontSize(layout.type.heading)
       this.placeInput(this.nameInput, layout.nameInput, layout.type.body)
+      this.placeButton(
+        this.buttonAt(this.setupObjects, 'QUICK MATCH'),
+        layout.quickMatchButton,
+        layout.type.heading,
+      )
       this.placeInput(this.codeInput, layout.codeInput, layout.type.body)
       this.capacityButtons.forEach((button, index) => {
         this.placeButton(button, layout.capacityButtons[index], layout.type.heading)
       })
-      this.placeButton(this.buttonAt(this.setupObjects, 'CREATE ROOM'), layout.createButton, layout.type.heading)
+      this.placeButton(
+        this.buttonAt(this.setupObjects, 'CREATE PRIVATE ROOM'),
+        layout.createButton,
+        layout.type.heading,
+      )
       this.placeButton(this.buttonAt(this.setupObjects, 'JOIN ROOM'), layout.joinButton, layout.type.heading)
       this.placeButton(this.buttonAt(this.setupObjects, 'BACK TO PUT-IN'), layout.backButton, layout.type.heading)
       this.statusText
@@ -260,12 +272,12 @@ export class LobbyScene extends Phaser.Scene {
       () => void this.startRace(),
       this.roomObjects,
     )
-    const copyButton = this.createButton(
+    this.copyButton = this.createButton(
       'COPY INVITE',
       () => void this.copyInvite(),
       this.roomObjects,
     )
-    const leaveButton = this.createButton(
+    this.leaveButton = this.createButton(
       'LEAVE ROOM',
       () => void this.leaveRoom(),
       this.roomObjects,
@@ -287,8 +299,12 @@ export class LobbyScene extends Phaser.Scene {
         .setWordWrapWidth(layout.members.width - layout.gutter * 2)
       this.placeButton(this.readyButton, layout.roomButtons[0], layout.type.heading)
       this.placeButton(this.startButton, layout.roomButtons[1], layout.type.heading)
-      this.placeButton(copyButton, layout.roomButtons[2], layout.type.heading)
-      this.placeButton(leaveButton, layout.roomButtons[3], layout.type.heading)
+      this.placeButton(this.copyButton, layout.roomButtons[2], layout.type.heading)
+      this.placeButton(
+        this.leaveButton,
+        this.connection?.room.matchmaking ? layout.queueLeaveButton : layout.roomButtons[3],
+        layout.type.heading,
+      )
     })
   }
 
@@ -382,22 +398,45 @@ export class LobbyScene extends Phaser.Scene {
     this.statusText.setVisible(!this.inRoom)
     if (this.nameInput) this.nameInput.style.display = this.inRoom ? 'none' : 'block'
     if (this.codeInput) this.codeInput.style.display = this.inRoom ? 'none' : 'block'
+    const privateControlsVisible = this.inRoom && !this.connection?.room.matchmaking
+    for (const button of [this.readyButton, this.startButton, this.copyButton]) {
+      button.background.setVisible(privateControlsVisible)
+      button.label.setVisible(privateControlsVisible)
+    }
+    this.placeButton(
+      this.leaveButton,
+      this.connection?.room.matchmaking
+        ? this.layout.queueLeaveButton
+        : this.layout.roomButtons[3],
+      this.layout.type.heading,
+    )
   }
 
   private renderLobby(snapshot: LobbySnapshot): void {
     const connected = snapshot.members.filter((member) => member.connected)
-    this.roomHeading.setText(`ROOM ${snapshot.room.code}`)
-    this.roomSubheading.setText(
-      `${connected.length} / ${snapshot.room.maxPlayers} PADDLERS  /  ` +
-      `${this.connection?.isHost ? 'YOU ARE HOST' : 'WAITING FOR HOST'}`,
-    )
+    if (snapshot.room.matchmaking) {
+      this.roomHeading.setText('QUICK MATCH')
+      this.roomSubheading.setText(
+        `${connected.length} IN QUEUE  /  AUTO-STARTS AT 2`,
+      )
+    } else {
+      this.roomHeading.setText(`ROOM ${snapshot.room.code}`)
+      this.roomSubheading.setText(
+        `${connected.length} / ${snapshot.room.maxPlayers} PADDLERS  /  ` +
+        `${this.connection?.isHost ? 'YOU ARE HOST' : 'WAITING FOR HOST'}`,
+      )
+    }
 
     const lineHeight = this.layout.type.body * 1.4
     const lineLimit = Math.max(2, Math.floor(this.layout.members.height / lineHeight))
     const shown = connected.slice(0, lineLimit)
     const lines = shown.map((member) => {
-      const host = member.playerId === snapshot.room.hostPlayerId ? '  HOST' : ''
-      const ready = member.ready ? 'READY' : 'SETTING UP'
+      const host = !snapshot.room.matchmaking && member.playerId === snapshot.room.hostPlayerId
+        ? '  HOST'
+        : ''
+      const ready = snapshot.room.matchmaking
+        ? 'IN QUEUE'
+        : member.ready ? 'READY' : 'SETTING UP'
       return `${member.name.toUpperCase()}  /  ${ready}${host}`
     })
     if (connected.length > shown.length) lines.push(`+ ${connected.length - shown.length} MORE PADDLERS`)
@@ -418,6 +457,17 @@ export class LobbyScene extends Phaser.Scene {
         levelId: this.levelId,
         playerName,
         maxPlayers: this.selectedCapacity,
+      })
+    })
+  }
+
+  private async quickMatch(): Promise<void> {
+    if (this.busy || !this.nameInput) return
+    await this.runRoomAction(async () => {
+      const playerName = savePlayerName(this.nameInput?.value ?? '')
+      return SupabaseRoomConnection.quickMatch({
+        levelId: this.levelId,
+        playerName,
       })
     })
   }
@@ -448,9 +498,10 @@ export class LobbyScene extends Phaser.Scene {
       this.statusText.setText('')
       this.stopLobbyListener = connection.onLobbyChange((snapshot) => this.renderLobby(snapshot))
       this.stopStartListener = connection.onStart(() => this.enterRace())
-      const invite = new URL(window.location.href)
-      invite.searchParams.set('room', connection.room.code)
-      window.history.replaceState({}, '', invite)
+      const roomUrl = new URL(window.location.href)
+      if (connection.room.matchmaking) roomUrl.searchParams.delete('room')
+      else roomUrl.searchParams.set('room', connection.room.code)
+      window.history.replaceState({}, '', roomUrl)
       this.renderView()
     } catch (error) {
       this.showStatus(messageFrom(error).toUpperCase())

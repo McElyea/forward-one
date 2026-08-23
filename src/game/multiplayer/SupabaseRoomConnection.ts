@@ -23,6 +23,7 @@ type LobbyListener = (snapshot: LobbySnapshot) => void
 type StartListener = (startsAtUnixMs: number) => void
 
 const ROOM_HEARTBEAT_MS = 20_000
+const MATCHMAKING_POLL_MS = 2_000
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -158,6 +159,38 @@ export class SupabaseRoomConnection implements HostedRaceSession {
     const requestedAt = Date.now()
     const response = await client.rpc('join_race_room', {
       p_code: normalizeRoomCode(options.code),
+      p_player_name: playerName,
+    })
+    const receivedAt = Date.now()
+    const room = parseRaceRoom(resultData(response.data, response.error))
+    const connection = new SupabaseRoomConnection(
+      client,
+      room,
+      localPlayerId,
+      playerName,
+      clockOffsetFrom(room, requestedAt, receivedAt),
+    )
+    try {
+      await connection.connect()
+      return connection
+    } catch (error) {
+      connection.destroy()
+      throw error
+    }
+  }
+
+  static async quickMatch(options: {
+    levelId: string
+    playerName: string
+  }): Promise<SupabaseRoomConnection> {
+    const client = getSupabaseClient()
+    const localPlayerId = await ensurePlayerId(client)
+    const playerName = sanitizePlayerName(options.playerName)
+    if (!playerName) throw new Error('Enter a paddler name')
+
+    const requestedAt = Date.now()
+    const response = await client.rpc('quick_match_race_room', {
+      p_level_id: options.levelId,
       p_player_name: playerName,
     })
     const receivedAt = Date.now()
@@ -320,9 +353,18 @@ export class SupabaseRoomConnection implements HostedRaceSession {
     })
     await this.trackPresence()
     await this.channel.send({ type: 'broadcast', event: 'room-changed', payload: {} })
+    this.startHeartbeat(
+      this.roomValue.matchmaking && this.roomValue.startsAtUnixMs === undefined
+        ? MATCHMAKING_POLL_MS
+        : ROOM_HEARTBEAT_MS,
+    )
+  }
+
+  private startHeartbeat(intervalMs: number): void {
+    if (this.heartbeatTimer !== undefined) window.clearInterval(this.heartbeatTimer)
     this.heartbeatTimer = window.setInterval(() => {
       void this.touchRoom().catch(() => undefined)
-    }, ROOM_HEARTBEAT_MS)
+    }, intervalMs)
   }
 
   private async trackPresence(): Promise<void> {
@@ -353,21 +395,32 @@ export class SupabaseRoomConnection implements HostedRaceSession {
   }
 
   private async refreshRoom(): Promise<void> {
+    const previousStartsAtUnixMs = this.roomValue.startsAtUnixMs
     const requestedAt = Date.now()
     const response = await this.client.rpc('get_race_room', { p_room_id: this.roomValue.id })
     const receivedAt = Date.now()
     this.roomValue = parseRaceRoom(resultData(response.data, response.error))
     this.serverClockOffsetMs = clockOffsetFrom(this.roomValue, requestedAt, receivedAt)
     this.emitLobby()
+    this.emitNewStart(previousStartsAtUnixMs)
   }
 
   private async touchRoom(): Promise<void> {
+    const previousStartsAtUnixMs = this.roomValue.startsAtUnixMs
     const requestedAt = Date.now()
     const response = await this.client.rpc('touch_race_room', { p_room_id: this.roomValue.id })
     const receivedAt = Date.now()
     this.roomValue = parseRaceRoom(resultData(response.data, response.error))
     this.serverClockOffsetMs = clockOffsetFrom(this.roomValue, requestedAt, receivedAt)
     this.emitLobby()
+    this.emitNewStart(previousStartsAtUnixMs)
+  }
+
+  private emitNewStart(previousStartsAtUnixMs: number | undefined): void {
+    const startsAtUnixMs = this.roomValue.startsAtUnixMs
+    if (previousStartsAtUnixMs !== undefined || startsAtUnixMs === undefined) return
+    this.startHeartbeat(ROOM_HEARTBEAT_MS)
+    this.emitStart(startsAtUnixMs)
   }
 
   private async receiveRaceStart(startsAtUnixMs: number): Promise<void> {
