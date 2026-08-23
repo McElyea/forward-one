@@ -96,7 +96,7 @@ Online races use anonymous Supabase Auth, private Realtime Presence for lobby me
 
 1. Create a Supabase project and enable **Authentication → Providers → Anonymous Sign-Ins**.
 2. In Realtime settings, disable public channels so the migration's room-membership policies are enforced.
-3. Run [`supabase/migrations/20260819000000_multiplayer_rooms.sql`](supabase/migrations/20260819000000_multiplayer_rooms.sql) in the SQL editor or with the Supabase CLI.
+3. Run every file in [`supabase/migrations`](supabase/migrations) in filename order using the SQL editor or Supabase CLI. The latest migration adds Quick Match's level-specific autofill queue.
 4. Copy [`.env.example`](.env.example) to `.env.local` and set the project URL and **publishable** key. Never put a secret or service-role key in a `VITE_` variable.
 5. Restart `npm run dev`, or rebuild before deploying—the Vite variables are compiled into the static bundle.
 

@@ -381,12 +381,14 @@ export interface LobbyLayout {
   title: Point
   content: Rect
   nameInput: Rect
+  quickMatchButton: Rect
   capacityButtons: Rect[]
   createButton: Rect
   codeInput: Rect
   joinButton: Rect
   members: Rect
   roomButtons: [Rect, Rect, Rect, Rect]
+  queueLeaveButton: Rect
   backButton: Rect
 }
 
@@ -406,6 +408,7 @@ export function lobbyLayout(width: number, height: number): LobbyLayout {
   const targetHeight = round(clamp(height * 0.09, MIN_TOUCH_PX, 58))
 
   let nameInput: Rect
+  let quickMatchButton: Rect
   let capacityButtons: Rect[]
   let createButton: Rect
   let codeInput: Rect
@@ -418,7 +421,15 @@ export function lobbyLayout(width: number, height: number): LobbyLayout {
     const right = round(content.x + columnWidth + columnGap)
     const fieldTop = round(content.y + type.heading * 1.35)
     nameInput = { x: left, y: fieldTop, width: round(columnWidth), height: targetHeight }
-    const capacityTop = round(fieldTop + targetHeight + type.heading * 1.55)
+    quickMatchButton = {
+      x: left,
+      y: round(fieldTop + targetHeight + gap),
+      width: round(columnWidth),
+      height: targetHeight,
+    }
+    const capacityTop = round(
+      quickMatchButton.y + quickMatchButton.height + type.heading * 1.55,
+    )
     const capacityWidth = (columnWidth - gap * 3) / 4
     capacityButtons = Array.from({ length: 4 }, (_, index) => ({
       x: round(left + index * (capacityWidth + gap)),
@@ -442,7 +453,15 @@ export function lobbyLayout(width: number, height: number): LobbyLayout {
   } else {
     const fieldTop = round(content.y + type.heading * 1.35)
     nameInput = { x: content.x, y: fieldTop, width: content.width, height: targetHeight }
-    const capacityTop = round(fieldTop + targetHeight + type.heading * 1.55)
+    quickMatchButton = {
+      x: content.x,
+      y: round(fieldTop + targetHeight + gap),
+      width: content.width,
+      height: targetHeight,
+    }
+    const capacityTop = round(
+      quickMatchButton.y + quickMatchButton.height + type.heading * 1.55,
+    )
     const capacityWidth = (content.width - gap * 3) / 4
     capacityButtons = Array.from({ length: 4 }, (_, index) => ({
       x: round(content.x + index * (capacityWidth + gap)),
@@ -487,6 +506,12 @@ export function lobbyLayout(width: number, height: number): LobbyLayout {
     width: content.width,
     height: round(Math.max(type.body * 3, roomButtonsTop - gap - content.y - type.title * 1.65)),
   }
+  const queueLeaveButton: Rect = {
+    x: content.x,
+    y: roomButtons[2].y,
+    width: content.width,
+    height: targetHeight,
+  }
   const backButton: Rect = mode === 'landscape'
     ? {
         x: codeInput.x,
@@ -510,12 +535,14 @@ export function lobbyLayout(width: number, height: number): LobbyLayout {
     title,
     content,
     nameInput,
+    quickMatchButton,
     capacityButtons,
     createButton,
     codeInput,
     joinButton,
     members,
     roomButtons,
+    queueLeaveButton,
     backButton,
   }
 }

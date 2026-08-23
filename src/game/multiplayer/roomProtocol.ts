@@ -12,6 +12,7 @@ export interface RaceRoom {
   levelId: string
   maxPlayers: number
   hostPlayerId: string
+  matchmaking: boolean
   state: RaceRoomState
   serverNowUnixMs: number
   startsAtUnixMs?: number
@@ -80,6 +81,9 @@ export function parseRaceRoom(value: unknown): RaceRoom {
   }
   const members = value.members
   if (!Array.isArray(members)) throw new Error('Room response has no members')
+  if (typeof value.matchmaking !== 'boolean') {
+    throw new Error('Room response has no matchmaking mode')
+  }
 
   const startsAt = value.startsAt
   const startsAtUnixMs = typeof startsAt === 'string' ? Date.parse(startsAt) : undefined
@@ -96,6 +100,7 @@ export function parseRaceRoom(value: unknown): RaceRoom {
     levelId: requiredString(value, 'levelId'),
     maxPlayers: requiredNumber(value, 'maxPlayers'),
     hostPlayerId: requiredString(value, 'hostPlayerId'),
+    matchmaking: value.matchmaking,
     state: state as RaceRoomState,
     serverNowUnixMs,
     startsAtUnixMs,
