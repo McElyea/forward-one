@@ -45,7 +45,7 @@ const resolveEvent = (
 ) => {
   const event = survival.events[cueIndex]
   if (rating) recordCue(survival, cueIndex, event.cue.strokes, rating)
-  return survival.resolveThrough(event.resolveAt + 1)
+  return survival.resolveThrough(event.collisionAt + 1)
 }
 
 describe('SurvivalEngine', () => {
@@ -97,7 +97,7 @@ describe('SurvivalEngine', () => {
     expect(survival.getSnapshot(10_000).stability).toBe(3)
   })
 
-  it('clears a fully judged obstacle immediately instead of drawing it through the raft', () => {
+  it('keeps a cleared obstacle visible until it has passed downstream', () => {
     const survival = new SurvivalEngine(LEVEL)
     survival.ensureScheduledThrough(10_000)
     const first = survival.events[0]
@@ -105,7 +105,8 @@ describe('SurvivalEngine', () => {
     recordCue(survival, 0, first.cue.strokes, 'perfect')
 
     expect(survival.resolveThrough(first.cue.at)).toEqual([])
-    expect(survival.getVisibleEvents(first.cue.at)).not.toContain(first)
+    expect(survival.getVisibleEvents(first.cue.at)).toContain(first)
+    expect(survival.getVisibleEvents(first.collisionAt + 3_601, 0)).not.toContain(first)
   })
 
   it('counts a partly missed multi-stroke call as an obstacle impact', () => {
@@ -115,10 +116,11 @@ describe('SurvivalEngine', () => {
 
     resolveEvent(survival, 0, 'perfect')
     recordCue(survival, 1, 1, 'perfect')
-    expect(survival.resolveThrough(event.resolveAt + 1).map(({ type }) => type)).toEqual([
+    expect(survival.resolveThrough(event.resolveAt + 1)).toEqual([])
+    expect(survival.resolveThrough(event.collisionAt + 1).map(({ type }) => type)).toEqual([
       'impact',
     ])
-    expect(survival.getSnapshot(event.resolveAt + 1).stability).toBe(2)
+    expect(survival.getSnapshot(event.collisionAt + 1).stability).toBe(2)
   })
 
   it('ejects after three failed calls, then allows two calls to reach the raft', () => {
@@ -156,9 +158,18 @@ describe('SurvivalEngine', () => {
     survival.ensureScheduledThrough(10_000)
     const first = survival.events[0]
 
+    expect(first.collisionAt - first.resolveAt).toBe(800)
     expect(survival.getCurrentCall(first.cue.at - 1_500)).toBe(first)
     expect(survival.getCurrentCall(first.cue.at - 1_501)).toBeUndefined()
     expect(survival.getVisibleEvents(first.cue.at, 0, 0)).toEqual([first])
+  })
+
+  it('keeps a multi-stroke obstacle visible through its final stroke window', () => {
+    const survival = new SurvivalEngine(LEVEL)
+    survival.ensureScheduledThrough(10_000)
+    const second = survival.events[1]
+
+    expect(survival.getVisibleEvents(second.cue.at + 500, 0, 0)).toContain(second)
   })
 })
 

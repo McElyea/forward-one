@@ -23,7 +23,10 @@ export interface ObstacleEvent {
   cueIndex: number
   cue: PaddleCue
   obstacle: ObstacleKind
+  /** Last instant at which the rhythm input can still land. */
   resolveAt: number
+  /** Later visual contact point, leaving time for the raft to dodge. */
+  collisionAt: number
 }
 
 export interface SurvivalTransition {
@@ -45,6 +48,8 @@ const MAX_DRIFT = 2
 const DEFAULT_INTERVAL_MS = 560
 const MIN_INTERVAL_MS = 280
 const MIN_RECOVERY_GAP_MS = 620
+const COLLISION_DELAY_MS = 800
+const PASSED_OBSTACLE_WINDOW_MS = 3_600
 
 const OBSTACLE_SEQUENCE: ObstacleKind[] = [
   'rock',
@@ -128,6 +133,7 @@ export class SurvivalEngine {
         cue,
         obstacle: OBSTACLE_SEQUENCE[(cueIndex + this.rapidClass) % OBSTACLE_SEQUENCE.length],
         resolveAt,
+        collisionAt: resolveAt + COLLISION_DELAY_MS,
       }
 
       this.events.push(event)
@@ -172,18 +178,18 @@ export class SurvivalEngine {
         (_, strokeIndex) => ratings?.get(strokeIndex),
       )
       const fullyJudged = cueRatings.every((rating) => rating !== undefined)
+      const succeeded = fullyJudged && cueRatings.every(
+        (rating) => rating !== undefined && SUCCESS_RATINGS.has(rating),
+      )
 
       if (
         this.resolvedCues.has(event.cueIndex) ||
-        (!fullyJudged && event.resolveAt >= elapsedMs)
+        (!succeeded && event.collisionAt >= elapsedMs)
       ) {
         continue
       }
 
       this.resolvedCues.add(event.cueIndex)
-      const succeeded = cueRatings.every(
-        (rating) => rating !== undefined && SUCCESS_RATINGS.has(rating),
-      )
 
       const transition = this.applyOutcome(event, succeeded)
       if (transition) transitions.push(transition)
@@ -205,12 +211,11 @@ export class SurvivalEngine {
   getVisibleEvents(
     elapsedMs: number,
     lookAheadMs = 2_800,
-    passedWindowMs = 700,
+    passedWindowMs = PASSED_OBSTACLE_WINDOW_MS,
   ): ObstacleEvent[] {
     return this.events.filter(
       (event) =>
-        !this.resolvedCues.has(event.cueIndex) &&
-        event.cue.at >= elapsedMs - passedWindowMs &&
+        event.collisionAt >= elapsedMs - passedWindowMs &&
         event.cue.at <= elapsedMs + lookAheadMs,
     )
   }
