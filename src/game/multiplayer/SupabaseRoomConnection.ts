@@ -1,9 +1,17 @@
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js'
 import type { HostedPlayerState, HostedRaceSession } from '../race/HostedRaceSession'
+import {
+  canStartRace,
+  isNewlyScheduledStart,
+  mergeLobbyMembers,
+  parsePlayerState,
+  parsePresence,
+  type PresentPaddler,
+} from './lobbyState'
 import { getSupabaseClient } from './multiplayerConfig'
 import {
   estimateServerClockOffset,
-  type LobbyMember,
+  isRecord,
   type LobbySnapshot,
   parseRaceRoom,
   type RaceRoom,
@@ -12,48 +20,11 @@ import {
 } from './roomProtocol'
 import { normalizeRoomCode, sanitizePlayerName, validateRoomCapacity } from './roomPolicy'
 
-interface PresencePayload {
-  playerId: string
-  name: string
-  colorIndex: number
-  ready: boolean
-}
-
 type LobbyListener = (snapshot: LobbySnapshot) => void
 type StartListener = (startsAtUnixMs: number) => void
 
 const ROOM_HEARTBEAT_MS = 20_000
 const MATCHMAKING_POLL_MS = 2_000
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-
-const presencePayload = (value: unknown): PresencePayload | undefined => {
-  if (!isRecord(value)) return undefined
-  const { playerId, name, colorIndex, ready } = value
-  if (
-    typeof playerId !== 'string' ||
-    typeof name !== 'string' ||
-    typeof colorIndex !== 'number' ||
-    typeof ready !== 'boolean'
-  ) {
-    return undefined
-  }
-  return { playerId, name, colorIndex, ready }
-}
-
-const playerState = (value: unknown): { playerId: string; state: HostedPlayerState } | undefined => {
-  if (!isRecord(value)) return undefined
-  const { playerId, survivalMs, eliminated } = value
-  if (
-    typeof playerId !== 'string' ||
-    typeof survivalMs !== 'number' ||
-    typeof eliminated !== 'boolean'
-  ) {
-    return undefined
-  }
-  return { playerId, state: { survivalMs, eliminated } }
-}
 
 const resultData = (data: unknown, error: { message: string } | null): unknown => {
   if (error) throw new Error(error.message)
@@ -84,7 +55,7 @@ export class SupabaseRoomConnection implements HostedRaceSession {
   private readonly channel: RealtimeChannel
   private readonly lobbyListeners = new Set<LobbyListener>()
   private readonly startListeners = new Set<StartListener>()
-  private readonly connectedPresence = new Map<string, PresencePayload>()
+  private readonly connectedPresence = new Map<string, PresentPaddler>()
   private readonly raceStates = new Map<string, HostedPlayerState>()
   private roomValue: RaceRoom
   private serverClockOffsetMs: number
@@ -230,27 +201,14 @@ export class SupabaseRoomConnection implements HostedRaceSession {
   }
 
   get lobbySnapshot(): LobbySnapshot {
-    const membersById = new Map(this.roomValue.members.map((member) => [member.playerId, member]))
-    for (const present of this.connectedPresence.values()) {
-      membersById.set(present.playerId, present)
+    return {
+      room: this.roomValue,
+      members: mergeLobbyMembers(this.roomValue, this.connectedPresence),
     }
-
-    const members: LobbyMember[] = Array.from(membersById.values()).map((member) => {
-      const present = this.connectedPresence.get(member.playerId)
-      return {
-        playerId: member.playerId,
-        name: member.name,
-        colorIndex: member.colorIndex,
-        ready: present?.ready ?? false,
-        connected: present !== undefined,
-      }
-    })
-    return { room: this.roomValue, members }
   }
 
   get canStart(): boolean {
-    const connected = this.lobbySnapshot.members.filter((member) => member.connected)
-    return this.isHost && connected.length >= 2 && connected.every((member) => member.ready)
+    return canStartRace(this.lobbySnapshot, this.localPlayerId)
   }
 
   getMembers(): readonly RaceRoomMember[] {
@@ -339,7 +297,7 @@ export class SupabaseRoomConnection implements HostedRaceSession {
         void this.receiveRaceStart(payload.startsAtUnixMs)
       })
       .on('broadcast', { event: 'player-state' }, ({ payload }) => {
-        const update = playerState(payload)
+        const update = parsePlayerState(payload)
         if (update) this.raceStates.set(update.playerId, update.state)
       })
 
@@ -386,7 +344,7 @@ export class SupabaseRoomConnection implements HostedRaceSession {
       for (const entries of Object.values(state)) {
         if (!Array.isArray(entries)) continue
         for (const entry of entries) {
-          const parsed = presencePayload(entry)
+          const parsed = parsePresence(entry)
           if (parsed) this.connectedPresence.set(parsed.playerId, parsed)
         }
       }
@@ -418,7 +376,7 @@ export class SupabaseRoomConnection implements HostedRaceSession {
 
   private emitNewStart(previousStartsAtUnixMs: number | undefined): void {
     const startsAtUnixMs = this.roomValue.startsAtUnixMs
-    if (previousStartsAtUnixMs !== undefined || startsAtUnixMs === undefined) return
+    if (!isNewlyScheduledStart(previousStartsAtUnixMs, startsAtUnixMs)) return
     this.startHeartbeat(ROOM_HEARTBEAT_MS)
     this.emitStart(startsAtUnixMs)
   }
