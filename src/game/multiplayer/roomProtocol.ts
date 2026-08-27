@@ -45,7 +45,7 @@ export function scheduledCountdownMs(
   return Math.max(0, startsAtUnixMs - (localNowUnixMs + serverClockOffsetMs))
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const requiredString = (record: Record<string, unknown>, key: string): string => {
