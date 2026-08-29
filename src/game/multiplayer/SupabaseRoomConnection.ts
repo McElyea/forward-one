@@ -19,18 +19,20 @@ import {
   scheduledCountdownMs,
 } from './roomProtocol'
 import { normalizeRoomCode, sanitizePlayerName, validateRoomCapacity } from './roomPolicy'
+import { failOnError, resultData } from './rpcResult'
+
+/**
+ * Said wherever a leave fails: the transport's own teardown, and the lobby's
+ * exit button. Both reach the same dead end, so both say the same thing.
+ */
+export const LEAVE_FAILED_WARNING =
+  'Leaving the race room failed; it may still list this paddler'
 
 type LobbyListener = (snapshot: LobbySnapshot) => void
 type StartListener = (startsAtUnixMs: number) => void
 
 const ROOM_HEARTBEAT_MS = 20_000
 const MATCHMAKING_POLL_MS = 2_000
-
-const resultData = (data: unknown, error: { message: string } | null): unknown => {
-  if (error) throw new Error(error.message)
-  if (data === null || data === undefined) throw new Error('The room service returned no data')
-  return data
-}
 
 const clockOffsetFrom = (room: RaceRoom, requestedAt: number, receivedAt: number): number =>
   estimateServerClockOffset(room.serverNowUnixMs, requestedAt, receivedAt)
@@ -272,7 +274,12 @@ export class SupabaseRoomConnection implements HostedRaceSession {
     this.lobbyListeners.clear()
     this.startListeners.clear()
     try {
-      await this.client.rpc('leave_race_room', { p_room_id: this.roomValue.id })
+      // `leave_race_room` returns void, so only its error half carries anything —
+      // but it carries a lot: the same call hands the room to the next paddler and
+      // deletes it once empty. A failure dropped here leaves the room listing a
+      // paddler who is gone, and a stale host nobody can start a race past.
+      const response = await this.client.rpc('leave_race_room', { p_room_id: this.roomValue.id })
+      failOnError(response.error)
       await this.channel.send({ type: 'broadcast', event: 'room-changed', payload: {} })
     } finally {
       if (this.heartbeatTimer !== undefined) window.clearInterval(this.heartbeatTimer)
@@ -283,7 +290,11 @@ export class SupabaseRoomConnection implements HostedRaceSession {
   }
 
   destroy(): void {
-    void this.leave().catch(() => undefined)
+    // Teardown cannot await, and a room that kept this paddler is not something
+    // the player can act on — but it should not vanish without a trace either.
+    void this.leave().catch((error: unknown) => {
+      console.warn(LEAVE_FAILED_WARNING, error)
+    })
   }
 
   private async connect(): Promise<void> {
