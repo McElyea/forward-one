@@ -28,6 +28,23 @@ import { failOnError, resultData } from './rpcResult'
 export const LEAVE_FAILED_WARNING =
   'Leaving the race room failed; it may still list this paddler'
 
+/**
+ * The repeating timer the room heartbeat runs on.
+ *
+ * Taken as an argument rather than reached for directly because it was the only
+ * DOM dependency in this class, and it kept the whole transport out of reach of
+ * the node suite — the lobby getters included.
+ */
+export interface IntervalScheduler {
+  setInterval(handler: () => void, ms: number): number
+  clearInterval(id: number): void
+}
+
+const browserIntervals: IntervalScheduler = {
+  setInterval: (handler, ms) => window.setInterval(handler, ms),
+  clearInterval: (id) => window.clearInterval(id),
+}
+
 type LobbyListener = (snapshot: LobbySnapshot) => void
 type StartListener = (startsAtUnixMs: number) => void
 
@@ -64,14 +81,22 @@ export class SupabaseRoomConnection implements HostedRaceSession {
   private localReady = false
   private closed = false
   private heartbeatTimer?: number
+  private readonly intervals: IntervalScheduler
 
-  private constructor(
+  /**
+   * `create`, `join` and `quickMatch` are how a room is entered — each obtains a
+   * client, calls its RPC and connects. This is public so a test can supply its
+   * own client and scheduler and drive the same paths without a browser.
+   */
+  constructor(
     client: SupabaseClient,
     room: RaceRoom,
     localPlayerId: string,
     playerName: string,
     serverClockOffsetMs: number,
+    intervals: IntervalScheduler = browserIntervals,
   ) {
+    this.intervals = intervals
     this.client = client
     this.roomValue = room
     this.localPlayerId = localPlayerId
@@ -282,7 +307,7 @@ export class SupabaseRoomConnection implements HostedRaceSession {
       failOnError(response.error)
       await this.channel.send({ type: 'broadcast', event: 'room-changed', payload: {} })
     } finally {
-      if (this.heartbeatTimer !== undefined) window.clearInterval(this.heartbeatTimer)
+      if (this.heartbeatTimer !== undefined) this.intervals.clearInterval(this.heartbeatTimer)
       this.heartbeatTimer = undefined
       await this.channel.untrack()
       await this.client.removeChannel(this.channel)
@@ -297,7 +322,12 @@ export class SupabaseRoomConnection implements HostedRaceSession {
     })
   }
 
-  private async connect(): Promise<void> {
+  /**
+   * Subscribe, announce this paddler, and start the heartbeat. The static
+   * factories call this immediately after constructing; it is public so a test
+   * that constructed directly can reach the same state a real room is in.
+   */
+  async connect(): Promise<void> {
     this.channel
       .on('presence', { event: 'sync' }, () => this.syncPresence())
       .on('broadcast', { event: 'room-changed' }, () => {
@@ -330,8 +360,8 @@ export class SupabaseRoomConnection implements HostedRaceSession {
   }
 
   private startHeartbeat(intervalMs: number): void {
-    if (this.heartbeatTimer !== undefined) window.clearInterval(this.heartbeatTimer)
-    this.heartbeatTimer = window.setInterval(() => {
+    if (this.heartbeatTimer !== undefined) this.intervals.clearInterval(this.heartbeatTimer)
+    this.heartbeatTimer = this.intervals.setInterval(() => {
       void this.touchRoom().catch(() => undefined)
     }, intervalMs)
   }
