@@ -8,7 +8,7 @@ import {
   ROOM_CAPACITY_OPTIONS,
 } from '../multiplayer/roomPolicy'
 import type { LobbySnapshot } from '../multiplayer/roomProtocol'
-import { SupabaseRoomConnection } from '../multiplayer/SupabaseRoomConnection'
+import { LEAVE_FAILED_WARNING, SupabaseRoomConnection } from '../multiplayer/SupabaseRoomConnection'
 import { lobbyLayout, type LobbyLayout, type Rect } from '../ui/layout'
 import {
   bodyStyle,
@@ -581,6 +581,10 @@ export class LobbyScene extends Phaser.Scene {
     this.connection = undefined
     try {
       await connection?.leave()
+    } catch (error) {
+      // Nothing to retry: the connection tore itself down on the way out, and the
+      // put-in screen is already arriving. Say so rather than drop it silently.
+      console.warn(LEAVE_FAILED_WARNING, error)
     } finally {
       const url = new URL(window.location.href)
       url.searchParams.delete('room')
