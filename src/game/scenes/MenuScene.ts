@@ -2,7 +2,7 @@ import Phaser from 'phaser'
 import {
   getSelectedGuideVoiceId,
   GUIDE_VOICES,
-  guideAudioKey,
+  guideVoicePreviewClip,
   loadGuideVoicePreviews,
   selectGuideVoice,
   type GuideVoiceId,
@@ -590,7 +590,15 @@ export class MenuScene extends Phaser.Scene {
 
     this.voicePreview?.stop()
     this.voicePreview?.destroy()
-    const preview = this.sound.add(guideAudioKey(voiceId, 'forward', 4), { volume: 1 })
+    this.voicePreview = undefined
+
+    // Ask guideAudio for the clip it queued rather than naming one again here, so
+    // the preview that is fetched and the preview that is played cannot drift
+    // apart. A clip that never arrived leaves the voice chosen, and stays silent.
+    const key = guideVoicePreviewClip(voiceId).key
+    if (!this.cache.audio.exists(key)) return
+
+    const preview = this.sound.add(key, { volume: 1 })
     this.voicePreview = preview
     preview.once(Phaser.Sound.Events.COMPLETE, () => {
       preview.destroy()
