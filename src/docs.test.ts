@@ -83,6 +83,18 @@ const sourceText: Record<string, string> = Object.fromEntries(
 
 const sourceFiles = new Set(Object.keys(sourceText))
 
+// Globbed rather than listed one by one so that a migration added later is held
+// to the same agreement without anyone remembering to add it here.
+const migrationText: Record<string, string> = Object.fromEntries(
+  Object.entries(
+    import.meta.glob<string>('../supabase/migrations/*.sql', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }),
+  ).map(([path, text]) => [path.replace('../', ''), text]),
+)
+
 describe('the README stays in step with the project it documents', () => {
   it('documents every npm script', () => {
     const undocumented = Object.keys(manifest.scripts)
@@ -457,5 +469,46 @@ describe('AGENTS.md still cites the source it describes', () => {
       `AGENTS.md citations whose lines are out of range or no longer mention ` +
         `anything the citing sentence names: ${stale.join(', ')}`,
     ).toEqual([])
+  })
+})
+
+/**
+ * `src/game/levels.ts` decides which rivers exist; the multiplayer schema repeats
+ * those ids as literal lists, in a table constraint and in every function that
+ * takes a level. Nothing tied the two together, so a fifth level would have been
+ * selectable on the put-in screen, playable solo, and rejected by the database on
+ * every online path — with a green build and a green suite.
+ */
+describe('the multiplayer schema stays in step with the levels that ship', () => {
+  const levels = sourceText['src/game/levels.ts']
+
+  const shippedIds = [...(levels ?? '').matchAll(/^\s+id: '([\w-]+)',$/gm)]
+    .map((level) => level[1])
+    .sort()
+
+  const schemaLists = Object.entries(migrationText).flatMap(([path, sql]) =>
+    [...sql.matchAll(/level_id (?:not )?in \(([^)]*)\)/g)].map((list) => ({
+      path,
+      ids: [...list[1].matchAll(/'([^']+)'/g)].map((id) => id[1]).sort(),
+    })),
+  )
+
+  it('can still read the ids from both sides', () => {
+    if (levels === undefined) throw new Error('levels.ts moved')
+
+    expect(shippedIds.length, 'no level ids could be read from levels.ts').toBeGreaterThan(0)
+    expect(
+      schemaLists.length,
+      'no level_id list could be read from supabase/migrations — the format has changed',
+    ).toBeGreaterThanOrEqual(4)
+  })
+
+  it('accepts exactly the levels the game ships, everywhere it checks', () => {
+    for (const list of schemaLists) {
+      expect(
+        list.ids,
+        `${list.path} accepts [${list.ids.join(', ')}] but levels.ts ships [${shippedIds.join(', ')}]`,
+      ).toEqual(shippedIds)
+    }
   })
 })
