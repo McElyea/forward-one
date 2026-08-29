@@ -6,9 +6,11 @@ compiles, and the ones where the obvious first attempt is wrong.
 
 Everything below was verified against the source it cites. When a claim and the code
 disagree, the code is right and this file is a bug. The `file:line` citations are held to
-that by `src/docs.test.ts`: a cited line that stops naming what the line citing it names
-fails the suite, rather than waiting for someone to re-read this file. Write a citation on
-the same line as the symbol it points at, so that check can see both.
+that by `src/docs.test.ts`: a citation naming a file that no longer contains anything the
+citing sentence names fails the suite, rather than waiting for someone to re-read this file.
+Cite the file, not a line in it — a line number is stale the next time an import is added
+above it, and the churn was never reviewed. Write the citation on the same line as the
+symbol it points at, so that check can see both.
 
 ## The gate
 
@@ -26,7 +28,7 @@ npm run test     # vitest run
 push to `main`, so the hosted `CI / build` check is the authoritative signal — but it tells
 you nothing you could not have learned locally in a few seconds first.
 
-`npm run build` *is* the type-check: `tsconfig.json` sets `"noEmit": true` (`:15`), so `tsc`
+`npm run build` *is* the type-check: `tsconfig.json` sets `"noEmit": true`, so `tsc`
 validates and `vite build` is what actually produces `dist/`.
 
 `Dockerfile` runs that same `npm run build` on `node:22-alpine` and serves the resulting
@@ -56,8 +58,8 @@ change is in the wrong place.
 **Colours and text styles come from `src/game/ui/theme.ts`** — `COLORS`, `headingStyle()`,
 `bodyStyle()` — not from inline literals.
 
-**Nothing is positioned with a literal coordinate. Ask `ui/layout.ts` instead.**
-The canvas is sized to the viewport (`Phaser.Scale.RESIZE`, `src/game/startGame.ts:17`), so
+**Nothing is positioned with a literal coordinate. Ask `src/game/ui/layout.ts` instead.**
+The canvas is sized to the viewport (`Phaser.Scale.RESIZE`, `src/game/startGame.ts`), so
 **one game unit is one CSS pixel** — a 44-unit button really is 44px under the player's
 thumb. `src/game/ui/layout.ts` turns `(width, height)` into named regions (`river`, `rail`,
 `rhythmLane`, `controls`, …) and a type scale, with separate portrait and landscape
@@ -67,7 +69,7 @@ profiles. It is pure arithmetic and imports nothing, so its behaviour is pinned 
 Two rules follow:
 
 - **Add to the layout, don't inline a number.** A new element needs a rect or point in
-  `layout.ts` and a test asserting it stays on screen and, if it is interactive, that it
+  `src/game/ui/layout.ts` and a test asserting it stays on screen and, if it is interactive, that it
   clears `MIN_TOUCH_PX`. Decorative work inside a region should be expressed as fractions
   of that region — see the normalised bank outlines at the top of `RiverScene.ts`.
 - **Handle re-layout, because rotating a phone fires it mid-run.** `MenuScene` holds no run
@@ -85,9 +87,9 @@ Class-field initializers therefore run exactly once, at construction — never a
 second visit.
 
 This means any mutable scene state must be reset in `init()`, not by a field initializer.
-`RiverScene.init()` (`src/game/scenes/RiverScene.ts:137`) is the reference: it reassigns
+`RiverScene.init()` (`src/game/scenes/RiverScene.ts`) is the reference: it reassigns
 every field it owns on entry, down to the `layoutAppliers` array of placement closures.
-`MenuScene.init()` (`src/game/scenes/MenuScene.ts:57`) does the same for the put-in screen.
+`MenuScene.init()` (`src/game/scenes/MenuScene.ts`) does the same for the put-in screen.
 
 `MenuScene` is also the worked example of what happens without one. It had no `init()` until
 [#11](https://github.com/McElyea/forward-one/pull/11), so `create()` pushed four more level
@@ -114,8 +116,8 @@ in this repo, and `package.json` runs a bare `vitest run` — so vitest's defaul
   top-level `test/` tree.
 
 The practical consequence: **to make something testable, extract it.** This is why
-`getSelectedGuideVoiceId()` and `selectGuideVoice()` (`src/game/audio/guideAudio.ts:23`
-and `:32`, both reading `window.localStorage`) have no coverage, while the pure helpers
+`getSelectedGuideVoiceId()` and `selectGuideVoice()` (`src/game/audio/guideAudio.ts`, both
+reading `window.localStorage`) have no coverage, while the pure helpers
 beside them in the same file do. Covering the browser-dependent half would require adding
 a `vite.config.ts` with `test.environment: 'jsdom'` plus the dependency — a deliberate
 change, not something to slip into an unrelated PR.
@@ -131,16 +133,16 @@ that exercises scene re-`create()`.
 There is **no ESLint, Prettier, Biome, or any other linter or formatter** in this repo.
 Nothing will reformat your code or catch style drift. What `tsconfig.json` does enforce:
 
-- `verbatimModuleSyntax` (`:13`) — importing a type as a value is a **build error**. Use
+- `verbatimModuleSyntax` — importing a type as a value is a **build error**. Use
   `import type { … }` for anything from `src/game/types.ts`.
-- `noUnusedLocals` and `noUnusedParameters` (`:19-20`) — an unused import or parameter
+- `noUnusedLocals` and `noUnusedParameters` — an unused import or parameter
   **fails the build**, it is not a warning. Prefix a deliberately-unused parameter with `_`,
   as `SoloRaceAdapter.recordStroke()` does.
-- `erasableSyntaxOnly` (`:21`) — rejects any TypeScript syntax that emits runtime code. In
+- `erasableSyntaxOnly` — rejects any TypeScript syntax that emits runtime code. In
   practice that means **constructor parameter properties**: `constructor(private readonly
   levels: …)` fails to compile. Declare the field and assign it in the body instead.
 - `noFallthroughCasesInSwitch`.
-- `strict` (`:18`) — `strictNullChecks`, `noImplicitAny` and the rest are on. Fix a strict
+- `strict` — `strictNullChecks`, `noImplicitAny` and the rest are on. Fix a strict
   error by narrowing, not with `!`, `as any`, or `@ts-expect-error`.
 
 `noUncheckedIndexedAccess` is **not** set, which is why an unguarded array access compiles
@@ -153,7 +155,7 @@ list before assuming an index is safe, and enable the flag only as a change of i
   stroke counts). They are produced by `npm run voice:generate`, which downloads an 82M
   Kokoro model. Never hand-edit, re-encode, or add a clip by hand; regenerate. `kokoro-js`
   is a dev dependency and players never download the model.
-- **The `sharp` override** in `package.json:26-28` — pinned to `0.35.3` for `kokoro-js`.
+- **The `sharp` override** in `package.json` — pinned to `0.35.3` for `kokoro-js`.
   Dropping it breaks voice generation.
 - **`src/game/levels.ts`** — cue timing and level data are gameplay-feel decisions. Fixing
   a defect that happens to live nearby is fine; retuning the difficulty is not, unless that

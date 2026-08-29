@@ -5,6 +5,7 @@ import dockerfile from '../Dockerfile?raw'
 import nginxConfig from '../docker/nginx.conf?raw'
 import manifestSource from '../package.json?raw'
 import readme from '../README.md?raw'
+import tsconfigSource from '../tsconfig.json?raw'
 
 /**
  * `README.md`, `AGENTS.md`, `package.json`, `ci.yml`, the `Dockerfile` and the
@@ -376,17 +377,22 @@ describe('the container image stays in step with the project it builds', () => {
 })
 
 /**
- * `AGENTS.md` points at the source it describes as `path:line`, and its opening
- * paragraph promises that every claim in it was verified against what it cites.
- * Line numbers are the half of that promise that rots without anyone touching the
- * file: a field added to a scene moves every declaration below it, and nothing
- * re-reads the guide. Two of its citations had gone stale before this was written.
+ * `AGENTS.md` points at the source it describes, and its opening paragraph
+ * promises that every claim in it was verified against what it cites.
  *
- * What is checkable here is narrower than "the claim is true": the file has to
- * exist, the lines have to be in range, and one of the identifiers the citing
- * sentence names in backticks has to appear on one of them. A citation that slides
- * onto a different line still mentioning the same symbol passes, so this replaces
- * none of the reading — it only stops the drift that nobody would notice.
+ * Citations name a file and not a line in it. Line numbers rotted without anyone
+ * touching the guide — an import added to `RiverScene` moved every declaration
+ * below it, and four of five consecutive edits to this file were a number nobody
+ * reviewed. Two citations had gone stale before the check existed at all.
+ *
+ * What is checkable here is narrower than "the claim is true": a cited path has
+ * to exist, and one of the identifiers the citing sentence names in backticks has
+ * to appear somewhere in it. This replaces none of the reading — it only stops the
+ * drift that nobody would notice.
+ *
+ * A bare filename naming a file the repo does not have — `vite.config.ts`, which
+ * the guide mentions precisely because it is absent — is a mention rather than a
+ * citation, so only paths into the tree are held to existing.
  *
  * The sentence is taken to be the one line of `AGENTS.md` the citation sits on,
  * which asks one thing of whoever writes the next citation: keep it on the same
@@ -400,29 +406,20 @@ const citableText: Record<string, string> = {
   'README.md': readme,
   Dockerfile: dockerfile,
   '.github/workflows/ci.yml': ciWorkflow,
+  'tsconfig.json': tsconfigSource,
 }
 
 interface Citation {
   file: string
-  from: number
-  to: number
   /** The line the citation sits on, whose other backticks name what it points at. */
   sentence: string
 }
 
-const CITATIONS = /`([\w./-]+\.(?:ts|json|yml|md|css|mjs)):(\d+(?:-\d+)?)`/g
-const IS_CITATION = /^[\w./-]+\.(?:ts|json|yml|md|css|mjs):\d+(?:-\d+)?$/
+const CITATIONS = /`([\w./-]+\.(?:ts|json|yml|md|css|mjs))`/g
+const IS_CITATION = /^[\w./-]+\.(?:ts|json|yml|md|css|mjs)$/
 
 const citations: Citation[] = agentsGuide.split('\n').flatMap((line) =>
-  [...line.matchAll(CITATIONS)].map((cited) => {
-    const bounds = cited[2].split('-').map(Number)
-    return {
-      file: cited[1],
-      from: bounds[0],
-      to: bounds[bounds.length - 1],
-      sentence: line,
-    }
-  }),
+  [...line.matchAll(CITATIONS)].map((cited) => ({ file: cited[1], sentence: line })),
 )
 
 /** The identifiers a citing line names in backticks, the citation itself aside. */
@@ -438,12 +435,17 @@ describe('AGENTS.md still cites the source it describes', () => {
   it('cites files that exist', () => {
     expect(
       citations.length,
-      'AGENTS.md has no `path:line` citations — the format they are parsed from has changed',
+      'AGENTS.md has no `path` citations — the format they are parsed from has changed',
     ).toBeGreaterThan(0)
 
+    // A bare filename can be a mention rather than a citation — the guide names
+    // `vite.config.ts` precisely because the repo does not have one. This file is
+    // excluded because it cannot glob-import itself, and it plainly exists: it is
+    // the thing running.
     const missing = citations
+      .filter((citation) => citation.file.includes('/') && citation.file !== 'src/docs.test.ts')
       .filter((citation) => !(citation.file in citableText))
-      .map((citation) => `${citation.file}:${citation.from}`)
+      .map((citation) => citation.file)
 
     expect(
       missing,
@@ -451,22 +453,27 @@ describe('AGENTS.md still cites the source it describes', () => {
     ).toEqual([])
   })
 
-  it('cites lines that name what the sentence around them names', () => {
+  it('cites files that name what the sentence around them names', () => {
     const stale = citations
       .filter((citation) => {
         // Absent files are the assertion above; reporting them twice helps nobody.
         if (!(citation.file in citableText)) return false
 
-        const cited = citableText[citation.file].split('\n').slice(citation.from - 1, citation.to)
         const named = identifiersNamedOn(citation.sentence)
+        // A path named with nothing else in backticks points at the file itself.
+        if (named.length === 0) return false
 
-        return !cited.some((line) => named.some((identifier) => line.includes(identifier)))
+        const cited = citableText[citation.file]
+
+        // Whole words only. Searching a file rather than a line makes a bare
+        // substring far too easy to hit by accident — `init` is in `initial`.
+        return !named.some((identifier) => new RegExp(`\\b${identifier}\\b`).test(cited))
       })
-      .map((citation) => `${citation.file}:${citation.from}`)
+      .map((citation) => citation.file)
 
     expect(
       stale,
-      `AGENTS.md citations whose lines are out of range or no longer mention ` +
+      `AGENTS.md citations naming a file that no longer mentions ` +
         `anything the citing sentence names: ${stale.join(', ')}`,
     ).toEqual([])
   })
