@@ -75,6 +75,7 @@ src/game/
   race/SupabaseRaceAdapter.ts
   multiplayer/SupabaseRoomConnection.ts
   multiplayer/lobbyState.ts who is in the room and when a race may start
+  multiplayer/lobbyRoster.ts what the room view says while the lobby is open
   survival/SurvivalEngine.ts endless obstacle schedule, intensity, ejection, and recovery
   run/runOutcome.ts         what the summary screen says when a run ends
   scenes/MenuScene.ts
