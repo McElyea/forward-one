@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import { getLevel } from '../levels'
+import { lobbyRoster, rosterLineLimit } from '../multiplayer/lobbyRoster'
 import { getPlayerName, savePlayerName } from '../multiplayer/playerIdentity'
 import {
   DEFAULT_ROOM_CAPACITY,
@@ -413,34 +414,13 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   private renderLobby(snapshot: LobbySnapshot): void {
-    const connected = snapshot.members.filter((member) => member.connected)
-    if (snapshot.room.matchmaking) {
-      this.roomHeading.setText('QUICK MATCH')
-      this.roomSubheading.setText(
-        `${connected.length} IN QUEUE  /  AUTO-STARTS AT 2`,
-      )
-    } else {
-      this.roomHeading.setText(`ROOM ${snapshot.room.code}`)
-      this.roomSubheading.setText(
-        `${connected.length} / ${snapshot.room.maxPlayers} PADDLERS  /  ` +
-        `${this.connection?.isHost ? 'YOU ARE HOST' : 'WAITING FOR HOST'}`,
-      )
-    }
-
-    const lineHeight = this.layout.type.body * 1.4
-    const lineLimit = Math.max(2, Math.floor(this.layout.members.height / lineHeight))
-    const shown = connected.slice(0, lineLimit)
-    const lines = shown.map((member) => {
-      const host = !snapshot.room.matchmaking && member.playerId === snapshot.room.hostPlayerId
-        ? '  HOST'
-        : ''
-      const ready = snapshot.room.matchmaking
-        ? 'IN QUEUE'
-        : member.ready ? 'READY' : 'SETTING UP'
-      return `${member.name.toUpperCase()}  /  ${ready}${host}`
+    const roster = lobbyRoster(snapshot, {
+      lineLimit: rosterLineLimit(this.layout.members.height, this.layout.type.body),
+      localIsHost: this.connection?.isHost ?? false,
     })
-    if (connected.length > shown.length) lines.push(`+ ${connected.length - shown.length} MORE PADDLERS`)
-    this.membersText.setText(lines.join('\n'))
+    this.roomHeading.setText(roster.heading)
+    this.roomSubheading.setText(roster.subheading)
+    this.membersText.setText(roster.lines.join('\n'))
 
     this.readyButton.label.setText(this.localReady ? 'NOT READY' : 'READY')
     this.readyButton.background.setFillStyle(this.localReady ? COLORS.success : COLORS.yellow, 1)
