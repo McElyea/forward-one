@@ -145,14 +145,24 @@ describe('lobbyRoster with more paddlers than lines', () => {
   it('counts the paddlers it had no room for', () => {
     const view = lobbyRoster(crowd(10), { ...roomy, lineLimit: 4 })
 
-    expect(view.lines.slice(0, 4).every((line) => line.startsWith('PADDLER'))).toBe(true)
-    expect(view.lines.at(-1), 'the six paddlers past the limit').toBe('+ 6 MORE PADDLERS')
+    expect(view.lines.slice(0, 3).every((line) => line.startsWith('PADDLER'))).toBe(true)
+    expect(view.lines.at(-1), 'the seven paddlers past the limit').toBe('+ 7 MORE PADDLERS')
   })
 
-  it('spends the overflow line on top of the limit, not out of it', () => {
-    // The count is drawn below a full list rather than displacing the last
-    // paddler in it, so a truncated roster is one line taller than it asked for.
-    expect(lobbyRoster(crowd(10), { ...roomy, lineLimit: 4 }).lines).toHaveLength(5)
+  it('spends the overflow line out of the limit, not on top of it', () => {
+    // The count takes the last line the region has room for rather than a
+    // line below it, so a truncated roster is exactly as tall as it asked for.
+    expect(lobbyRoster(crowd(10), { ...roomy, lineLimit: 4 }).lines).toHaveLength(4)
+  })
+
+  it('counts the paddler the overflow line displaced', () => {
+    // Five paddlers in four lines: three are listed, and the count covers the
+    // one whose line it took as well as the one that never had a line.
+    const view = lobbyRoster(crowd(5), { ...roomy, lineLimit: 4 })
+
+    expect(view.lines).toHaveLength(4)
+    expect(view.lines.at(-1), 'the displaced paddler and the one past the limit')
+      .toBe('+ 2 MORE PADDLERS')
   })
 
   it('leaves the count off when every paddler fits', () => {
@@ -160,6 +170,14 @@ describe('lobbyRoster with more paddlers than lines', () => {
 
     expect(view.lines).toHaveLength(4)
     expect(view.lines.join('\n')).not.toContain('MORE PADDLERS')
+  })
+
+  it('still lists one paddler at the two-line floor', () => {
+    // `rosterLineLimit()` never answers below two, so this is the tightest room
+    // a real region produces: one paddler, then the count for the other two.
+    const view = lobbyRoster(crowd(3), { ...roomy, lineLimit: rosterLineLimit(0, 16) })
+
+    expect(view.lines).toEqual(['PADDLER0  /  SETTING UP', '+ 2 MORE PADDLERS'])
   })
 
   it('still counts them all when there is no room for a single line', () => {
