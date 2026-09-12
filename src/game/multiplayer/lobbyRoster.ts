@@ -25,7 +25,7 @@ export interface LobbyRoster {
 
 /** What the local client knows about the room that the snapshot does not. */
 export interface LobbyRosterView {
-  /** How many paddler lines fit — `rosterLineLimit()` is where it comes from. */
+  /** How many lines fit, the overflow count included — see `rosterLineLimit()`. */
   lineLimit: number
   localIsHost: boolean
 }
@@ -46,16 +46,19 @@ export function rosterLineLimit(heightPx: number, bodySizePx: number): number {
 export function lobbyRoster(snapshot: LobbySnapshot, view: LobbyRosterView): LobbyRoster {
   const queue = snapshot.room.matchmaking
   const connected = connectedPaddlers(snapshot)
-  const shown = connected.slice(0, Math.max(0, view.lineLimit))
+  const lineLimit = Math.max(0, view.lineLimit)
+  // The paddlers who did not fit are counted rather than dropped. The count
+  // takes the last line the region has room for, so the paddler it displaces
+  // is counted with the ones that never had a line.
+  const truncated = connected.length > lineLimit
+  const shown = connected.slice(0, truncated ? Math.max(0, lineLimit - 1) : lineLimit)
 
   const lines = shown.map((member) => {
     const host = !queue && member.playerId === snapshot.room.hostPlayerId ? '  HOST' : ''
     const ready = queue ? 'IN QUEUE' : member.ready ? 'READY' : 'SETTING UP'
     return `${member.name.toUpperCase()}  /  ${ready}${host}`
   })
-  // The paddlers who did not fit are counted rather than dropped, on a line of
-  // their own past the limit the ones above it were held to.
-  if (connected.length > shown.length) {
+  if (truncated) {
     lines.push(`+ ${connected.length - shown.length} MORE PADDLERS`)
   }
 
