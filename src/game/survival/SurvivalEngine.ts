@@ -42,8 +42,10 @@ export interface SurvivalSnapshot {
   intensity: number
 }
 
-const MAX_STABILITY = 3
-const RECOVERY_CALLS = 2
+/** Raft hit points; the HUD quotes it as the denominator of `RAFT HP n/3`. */
+export const MAX_STABILITY = 3
+/** Successful calls a swimmer needs to get back aboard; quoted the same way. */
+export const RECOVERY_CALLS = 2
 const MAX_DRIFT = 2
 const DEFAULT_INTERVAL_MS = 560
 const MIN_INTERVAL_MS = 280

@@ -16,10 +16,20 @@ import { rankRacers } from '../race/rankRacers'
 import { raceClockMs, raceElapsedMs, raceTimeExpired } from '../race/raceRules'
 import { selectRailRacers } from '../race/selectRailRacers'
 import { RhythmEngine } from '../rhythm/RhythmEngine'
-import { callBanner, obstacleLabel, type BannerTone } from '../run/callBanner'
+import { callBanner, type BannerTone } from '../run/callBanner'
+import {
+  countdownBanner,
+  nextStreak,
+  runSummaryLine,
+  statsLine,
+  strokeFeedback,
+  survivalStatusLine,
+  transitionFeedback,
+} from '../run/runHud'
 import { placeOfLocal, runOutcome, timeLimitOutcome } from '../run/runOutcome'
 import {
   SurvivalEngine,
+  type RiverState,
   type SurvivalTransition,
 } from '../survival/SurvivalEngine'
 import type {
@@ -54,6 +64,12 @@ const RATING_COLOR: Record<StrokeRating, string> = {
   late: TEXT_COLORS.warning,
   wrong: TEXT_COLORS.danger,
   miss: TEXT_COLORS.danger,
+}
+
+const SURVIVAL_COLOR: Record<RiverState, string> = {
+  aboard: TEXT_COLORS.cream,
+  overboard: TEXT_COLORS.warning,
+  'swept-away': TEXT_COLORS.danger,
 }
 
 const LOOK_AHEAD_MS = 2_200
@@ -1013,37 +1029,27 @@ export class RiverScene extends Phaser.Scene {
 
   private updateHud(elapsed: number, countingDown: boolean): void {
     if (countingDown) {
-      const seconds = Math.ceil((this.startAt - this.time.now) / 1000)
+      const countdown = countdownBanner(this.startAt - this.time.now)
       this.callText
-        .setText(seconds > 0 ? `${seconds}` : 'GO!')
+        .setText(countdown.headline)
         .setFontSize(Math.round(this.layout.type.hero * 1.2))
         .setColor('#ffc857')
-      this.callSubtext.setText('THE CLOCK STARTS TOGETHER')
+      this.callSubtext.setText(countdown.subtext)
     }
 
     this.timeText.setText(formatRunClock(raceClockMs(this.mode, elapsed)))
-    const accuracy = this.rhythm.getAccuracy()
     this.statsText.setText(
-      this.layout.mode === 'landscape' && this.layout.width >= 760
-        ? `ACCURACY ${accuracy}%   SCORE ${this.totalPoints.toLocaleString()}`
-        : `${accuracy}%  /  ${this.totalPoints.toLocaleString()}`,
+      statsLine(
+        this.rhythm.getAccuracy(),
+        this.totalPoints,
+        this.layout.mode === 'landscape' && this.layout.width >= 760,
+      ),
     )
 
     const survival = this.survival.getSnapshot(elapsed)
-    if (survival.state === 'aboard') {
-      this.survivalText
-        .setText(
-          `RAFT HP ${survival.stability}/3  •  FLOW ${survival.intensity.toFixed(1)}×` +
-          (this.streak > 1 ? `  •  STREAK ×${this.streak}` : ''),
-        )
-        .setColor(TEXT_COLORS.cream)
-    } else if (survival.state === 'overboard') {
-      this.survivalText
-        .setText(`OVERBOARD  /  ${survival.recovery}/2 TO RAFT`)
-        .setColor(TEXT_COLORS.warning)
-    } else {
-      this.survivalText.setText('SWEPT AWAY').setColor(TEXT_COLORS.danger)
-    }
+    this.survivalText
+      .setText(survivalStatusLine(survival, this.streak))
+      .setColor(SURVIVAL_COLOR[survival.state])
   }
 
   private onForwardPaddle(): void {
@@ -1076,10 +1082,11 @@ export class RiverScene extends Phaser.Scene {
 
   private applyJudgment(judgment: StrokeJudgment): void {
     this.totalPoints += judgment.points
-    this.streak = judgment.target && judgment.points > 0 ? this.streak + 1 : 0
+    this.streak = nextStreak(this.streak, judgment)
     this.survival.recordJudgment(judgment)
     this.race.recordStroke(judgment)
-    this.showFeedback(judgment.rating === 'wrong' ? 'WRONG WAY' : judgment.rating.toUpperCase(), judgment.rating)
+    const feedback = strokeFeedback(judgment)
+    this.showFeedback(feedback.label, feedback.rating)
 
     const dodgeCueIndex = raftDodgeCueIndex(judgment, this.lastRaftCueIndex)
     if (dodgeCueIndex !== undefined) this.moveRaftToLane(dodgeCueIndex)
@@ -1114,23 +1121,18 @@ export class RiverScene extends Phaser.Scene {
   }
 
   private handleSurvivalTransition(transition: SurvivalTransition): void {
-    const obstacle = obstacleLabel(transition.event.obstacle)
+    const { stability } = this.survival.getSnapshot(0)
+    const feedback = transitionFeedback(transition, stability)
+    if (feedback) this.showFeedback(feedback.label, feedback.rating)
 
+    // The words come from the module; the shake and the flash stay here, with
+    // the camera and the tween they drive.
     if (transition.type === 'impact') {
-      const { stability } = this.survival.getSnapshot(0)
-      this.showFeedback(`${obstacle} HIT  •  HP ${stability}/3`, 'wrong')
       this.flashRaftDamage()
       this.cameras.main.shake(180, 0.006)
     } else if (transition.type === 'ejected') {
-      this.showFeedback('RAFT HP 0/3  •  OVERBOARD', 'wrong')
       this.flashRaftDamage()
       this.cameras.main.shake(320, 0.012)
-    } else if (transition.type === 'recovery-progress') {
-      this.showFeedback('CLOSING ON THE RAFT', 'good')
-    } else if (transition.type === 'drifted') {
-      this.showFeedback('RAFT PULLING AWAY', 'late')
-    } else if (transition.type === 'recovered') {
-      this.showFeedback('BACK ABOARD', 'perfect')
     }
   }
 
@@ -1229,7 +1231,7 @@ export class RiverScene extends Phaser.Scene {
       .text(
         0,
         0,
-        `${formatRunClock(elapsed)}   •   ${this.rhythm.getAccuracy()}% ACCURACY   •   ${this.totalPoints.toLocaleString()} PTS`,
+        runSummaryLine(elapsed, this.rhythm.getAccuracy(), this.totalPoints),
         headingStyle(this.layout.type.heading, TEXT_COLORS.cream),
       )
       .setOrigin(0.5)
