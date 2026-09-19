@@ -78,6 +78,7 @@ src/game/
   multiplayer/lobbyRoster.ts what the room view says while the lobby is open
   survival/SurvivalEngine.ts endless obstacle schedule, intensity, ejection, and recovery
   run/runOutcome.ts         what the summary screen says when a run ends
+  run/runHud.ts             what the HUD says while a run is on
   scenes/MenuScene.ts
   scenes/LobbyScene.ts
   scenes/RiverScene.ts
