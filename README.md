@@ -85,9 +85,17 @@ src/game/
   ui/layout.ts              viewport-driven regions and type scale
   ui/fontLoading.ts         gates boot until the bundled faces are usable
   ui/runClock.ts            the M:SS.CC run clock, shared by the HUD and the summary
+  usage/usageEvents.ts      what the game reports about being played, and when it doesn't
+  usage/usageTransport.ts   delivers those events to the game's own origin
 
 src/assets/fonts/           self-hosted Barlow Condensed and Inter (woff2, OFL 1.1)
 ```
+
+## Usage reporting
+
+A deployed copy of the game tells its own server when it is played, so the people running it can see that it is being used. Four events, each a small JSON object `POST`ed to `/api/events` on the game's own origin: the page was opened (device class, orientation, viewport size, the referring site's host, whether this browser has been here before, and whether the bundled fonts loaded), a run started (water, mode, guide voice), a run ended (how long it lasted, place, accuracy, points, and whether the river ended it, the clock did, or the player left), and an uncaught error (message, stack, browser). Nothing in an event identifies a player — no id, no name, no address — and the only thing kept in the browser for it is a flag that says the browser has visited before. `src/game/usage/usageEvents.ts` is the whole list; it is the place to read if you want to know exactly what is sent.
+
+The game does not report when the browser sends **Do Not Track** or **Global Privacy Control**, when the page is served from `localhost` or a `.local` host, or under the Vite dev server. A deployment that has nothing listening at `/api/events` simply gets a 404 on each beacon, which the game never waits on or reacts to; the bundle carries no webhook, key, or address of its own.
 
 ## Contributing
 

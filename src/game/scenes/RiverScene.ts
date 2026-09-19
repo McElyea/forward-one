@@ -3,6 +3,7 @@ import raftTopDownUrl from '../../assets/raft-top-down.png'
 import {
   getSelectedGuideVoiceId,
   guideAudioKey,
+  GUIDE_VOICES,
   loadGuideAudio,
   type GuideCallNumber,
   type GuideVoiceId,
@@ -27,6 +28,8 @@ import {
   transitionFeedback,
 } from '../run/runHud'
 import { placeOfLocal, runOutcome, timeLimitOutcome } from '../run/runOutcome'
+import { runEndReason, runEndedEvent, runStartedEvent } from '../usage/usageEvents'
+import { sendUsageEvent } from '../usage/usageTransport'
 import {
   SurvivalEngine,
   type RiverState,
@@ -207,6 +210,16 @@ export class RiverScene extends Phaser.Scene {
 
     const raceStart = this.race.start(this.level.survivalBenchmarkMs)
     this.startAt = this.time.now + raceStart.countdownMs
+
+    sendUsageEvent(
+      runStartedEvent({
+        levelName: this.level.name,
+        rapidClass: this.level.rapidClass,
+        mode: this.mode,
+        voiceName: GUIDE_VOICES.find((voice) => voice.id === this.guideVoiceId)?.name ?? this.guideVoiceId,
+        touch: this.sys.game.device.input.touch,
+      }),
+    )
   }
 
   update(time: number): void {
@@ -1206,6 +1219,7 @@ export class RiverScene extends Phaser.Scene {
       )
     const headingLabel = outcome.heading
     const blurbLabel = outcome.blurb
+    this.reportRunEnded(elapsed, outcome.place, runEndReason(true, timeExpired))
 
     const scrim = this.add.rectangle(0, 0, 10, 10, COLORS.ink, 0.9).setOrigin(0).setDepth(50)
     const panel = this.add
@@ -1348,7 +1362,35 @@ export class RiverScene extends Phaser.Scene {
     this.scene.start('menu', { levelId: this.level.id })
   }
 
+  /**
+   * One event per run, however it ended. Sent from `finishRace()` for a run
+   * the river ended and from `cleanUp()` for one the player walked out of —
+   * the `completed` flag is what tells the two apart, so the second caller
+   * never double-reports a finished run.
+   */
+  private reportRunEnded(elapsed: number, place: number, outcome: ReturnType<typeof runEndReason>): void {
+    sendUsageEvent(
+      runEndedEvent({
+        levelName: this.level.name,
+        rapidClass: this.level.rapidClass,
+        mode: this.mode,
+        elapsedMs: elapsed,
+        place,
+        accuracy: this.rhythm.getAccuracy(),
+        points: this.totalPoints,
+        outcome,
+      }),
+    )
+  }
+
   private cleanUp(): void {
+    if (!this.completed) {
+      this.reportRunEnded(
+        Math.max(0, raceElapsedMs(this.mode, this.time.now - this.startAt)),
+        placeOfLocal(rankRacers(this.racers)),
+        runEndReason(false, false),
+      )
+    }
     this.input.keyboard?.off('keydown-SPACE', this.onForwardPaddle, this)
     this.input.keyboard?.off('keydown-F', this.onForwardPaddle, this)
     this.input.keyboard?.off('keydown-UP', this.onForwardPaddle, this)
