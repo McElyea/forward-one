@@ -30,25 +30,33 @@ function enabled(): boolean {
 }
 
 /**
- * Fire and forget. `sendBeacon` survives the tab closing mid-run, which is
- * exactly when an abandoned-run event is sent; `fetch` with `keepalive` is the
- * same promise where the beacon API is missing. A failure of either is the
+ * Fire and forget. `fetch` with `keepalive` survives the tab closing mid-run,
+ * which is exactly when an abandoned-run event is sent, and a failure is the
  * server's problem to notice, never the player's.
+ *
+ * `fetch`, not `navigator.sendBeacon`: a beacon is a `ping`-type request, and
+ * content blockers drop that type wholesale — uBlock Origin does by default,
+ * and EasyPrivacy's `$ping` rules do the rest — while `sendBeacon()` still
+ * answers `true`, so no fallback ever ran. Measured on 2026-09-20: a real
+ * Chrome played a full session and nothing arrived. The beacon is kept only
+ * for a browser with no `fetch` at all.
  */
 export function sendUsageEvent(event: UsageEvent): void {
   if (!enabled()) return
   const body = JSON.stringify(event)
   try {
-    if (typeof navigator.sendBeacon === 'function') {
-      const blob = new Blob([body], { type: 'application/json' })
-      if (navigator.sendBeacon(USAGE_EVENTS_PATH, blob)) return
+    if (typeof fetch === 'function') {
+      void fetch(USAGE_EVENTS_PATH, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        keepalive: true,
+      }).catch(() => undefined)
+      return
     }
-    void fetch(USAGE_EVENTS_PATH, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-      keepalive: true,
-    }).catch(() => undefined)
+    if (typeof navigator.sendBeacon === 'function') {
+      navigator.sendBeacon(USAGE_EVENTS_PATH, new Blob([body], { type: 'application/json' }))
+    }
   } catch {
     // Reporting must never be the thing that throws.
   }
