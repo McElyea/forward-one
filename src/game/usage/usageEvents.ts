@@ -3,7 +3,7 @@ import type { RaceMode, RapidClass } from '../types'
 /**
  * What the game tells its own server about being played.
  *
- * Each event is a small JSON object POSTed to `/api/events` on the game's own
+ * Each event is a small JSON object POSTed to `/api/river-log` on the game's own
  * origin. The deployment routes that one path to a relay that turns events
  * into Discord posts for the people running the game; the bundle itself holds
  * no webhook, no key, and no address other than its own. Nothing here
@@ -16,7 +16,13 @@ import type { RaceMode, RapidClass } from '../types'
  * keep the two in step — an event the relay rejects is dropped silently.
  */
 
-export const USAGE_EVENTS_PATH = '/api/events'
+/**
+ * Not `/api/events`: EasyPrivacy carries `/api/events|$ping,~third-party`, a
+ * rule for exactly that path, so under uBlock Origin, AdGuard or Brave a
+ * beacon to it never left the browser. Checked against EasyPrivacy, EasyList
+ * and uBO's privacy list on 2026-09-20; re-check before renaming.
+ */
+export const USAGE_EVENTS_PATH = '/api/river-log'
 
 export const RETURNING_VISITOR_KEY = 'forward-one.visited'
 
