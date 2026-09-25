@@ -73,3 +73,26 @@ describe('the put-in screen previews', () => {
     )
   })
 })
+
+describe('the bundled guide audio', () => {
+  // A lazy glob only lists the matching paths; no WAV is ever read.
+  const bundled = Object.keys(import.meta.glob('../../../public/audio/guide/*/*.wav'))
+    .map((path) => path.slice(path.indexOf('public/') + 'public/'.length))
+    .sort()
+  const requested = GUIDE_VOICES
+    .flatMap((voice) => guideVoiceClips(voice.id))
+    .map((clip) => clip.url.slice(import.meta.env.BASE_URL.length))
+    .sort()
+
+  it('has a generated WAV for every clip a voice can request', () => {
+    const missing = requested.filter((url) => !bundled.includes(url))
+
+    expect(missing, 'clips no file under public/ answers, so the loader would 404').toEqual([])
+  })
+
+  it('ships no WAV that no voice ever requests', () => {
+    const unused = bundled.filter((url) => !requested.includes(url))
+
+    expect(unused, 'WAVs under public/audio/guide/ that no clip points at').toEqual([])
+  })
+})
