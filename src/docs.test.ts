@@ -273,6 +273,55 @@ describe('the README stays in step with the rules the code enforces', () => {
   })
 })
 
+/**
+ * `RaceAdapter` is the solo/multiplayer boundary, and both guides describe it by
+ * naming the classes behind it. The README once dropped that description when
+ * the hosted adapter landed, while `AGENTS.md` went on citing the README for it,
+ * so an adapter added later has to be named in both before the suite is green.
+ */
+describe('the guides name every race adapter behind the boundary', () => {
+  const adapters = Object.entries(sourceText)
+    .filter(([path]) => !path.endsWith('.test.ts'))
+    .flatMap(([path, text]) =>
+      [...text.matchAll(/export class (\w+) implements RaceAdapter\b/g)].map((found) => ({
+        path,
+        name: found[1],
+      })),
+    )
+
+  it('can still find the implementations', () => {
+    expect(
+      adapters.length,
+      'no `export class … implements RaceAdapter` could be read — the format has changed',
+    ).toBeGreaterThan(0)
+  })
+
+  it('lists every implementation in the README project structure', () => {
+    const unlisted = adapters
+      .filter((adapter) => !documentedPaths.includes(adapter.path))
+      .map((adapter) => adapter.path)
+
+    expect(
+      unlisted,
+      `RaceAdapter implementations missing from the README "Project structure": ${unlisted.join(', ')}`,
+    ).toEqual([])
+  })
+
+  it('names every implementation in the README and AGENTS.md', () => {
+    const guides: Record<string, string> = { 'README.md': readme, 'AGENTS.md': agentsGuide }
+    for (const [guide, text] of Object.entries(guides)) {
+      const unnamed = adapters
+        .filter((adapter) => !new RegExp(`\\b${adapter.name}\\b`).test(text))
+        .map((adapter) => adapter.name)
+
+      expect(
+        unnamed,
+        `${guide} never names these RaceAdapter implementations: ${unnamed.join(', ')}`,
+      ).toEqual([])
+    }
+  })
+})
+
 describe('the README stays in step with the guide voices that ship', () => {
   const guideAudio = sourceText['src/game/audio/guideAudio.ts']
 
