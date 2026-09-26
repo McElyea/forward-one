@@ -71,6 +71,8 @@ src/game/
   levels.ts                 data-driven Class II–V runs
   rhythm/RhythmEngine.ts    framework-independent timing judgments
   race/RaceAdapter.ts       solo/multiplayer boundary
+  race/createRaceAdapter.ts picks the adapter for a run's mode
+  race/SoloRaceAdapter.ts
   race/SimulatedRaceAdapter.ts
   race/SupabaseRaceAdapter.ts
   multiplayer/SupabaseRoomConnection.ts
@@ -104,6 +106,8 @@ The game does not report when the browser sends **Do Not Track** or **Global Pri
 ## Multiplayer setup
 
 Online races use anonymous Supabase Auth, private Realtime Presence for lobby membership, and Broadcast for the shared start and sparse survival heartbeats. The deterministic river continues to run locally; active opponents advance from the shared database-generated start time. Ranking retains every player, while the in-race rail shows at most eight useful positions—the leader, the local paddler, and nearby racers—so a 64-player room remains legible on a phone.
+
+Every run, solo or online, goes through the `RaceAdapter` interface in [`src/game/race/RaceAdapter.ts`](src/game/race/RaceAdapter.ts). `createRaceAdapter()` picks the implementation for the run's mode — `SoloRaceAdapter`, `SimulatedRaceAdapter` for the preview, or `SupabaseRaceAdapter` for a hosted room — and `RiverScene` only ever talks to the interface, so a different hosted backend arrives as a new adapter without `RiverScene` changing.
 
 1. Create a Supabase project and enable **Authentication → Providers → Anonymous Sign-Ins**.
 2. In Realtime settings, disable public channels so the migration's room-membership policies are enforced.
