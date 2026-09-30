@@ -139,6 +139,21 @@ describe('the README stays in step with the project it documents', () => {
       `README "Project structure" paths that no longer exist: ${missing.join(', ')}`,
     ).toEqual([])
   })
+
+  // The tree is where a newcomer looks for a module, and it had fallen seventeen
+  // modules behind — among them `theme.ts`, `levelSelection.ts` and
+  // `guideAudio.ts`, the three AGENTS.md holds up as the patterns to copy.
+  it('lists every module under its root', () => {
+    const root = structureLines[0].trim()
+    const unlisted = [...sourceFiles]
+      .filter((path) => path.startsWith(root) && !path.endsWith('.test.ts'))
+      .filter((path) => !documentedPaths.includes(path))
+
+    expect(
+      unlisted,
+      `modules missing from the README "Project structure": ${unlisted.join(', ')}`,
+    ).toEqual([])
+  })
 })
 
 /**
