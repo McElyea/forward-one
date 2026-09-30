@@ -68,23 +68,40 @@ Kokoro is a development-only dependency. Its 82M-parameter model is used only by
 
 ```text
 src/game/
+  startGame.ts              creates the Phaser game and registers the scenes
+  types.ts                  shared types: levels, cues, stroke judgments, racer snapshots
   levels.ts                 data-driven Class II–V runs
+  audio/guideAudio.ts       guide voices, their clips and cache keys, and the remembered choice
   rhythm/RhythmEngine.ts    framework-independent timing judgments
   race/RaceAdapter.ts       solo/multiplayer boundary
   race/createRaceAdapter.ts picks the adapter for a run's mode
   race/SoloRaceAdapter.ts
   race/SimulatedRaceAdapter.ts
   race/SupabaseRaceAdapter.ts
+  race/HostedRaceSession.ts the transport-neutral session a hosted adapter reads
+  race/raceRules.ts         the multiplayer time limit and who leads when it expires
+  race/rankRacers.ts        race order: active racers first, the rest by time survived
+  race/selectRailRacers.ts  which racers a crowded progress rail keeps
+  race/railLabels.ts        spreads racer names along the rail without leaving it
+  multiplayer/multiplayerConfig.ts whether online rooms are configured, and the client
   multiplayer/SupabaseRoomConnection.ts
+  multiplayer/roomPolicy.ts room capacities, room codes, and paddler names
+  multiplayer/roomProtocol.ts parses room payloads and schedules the shared start
+  multiplayer/rpcResult.ts  turns a supabase-js error result into a thrown error
+  multiplayer/playerIdentity.ts the paddler name kept in this browser
   multiplayer/lobbyState.ts who is in the room and when a race may start
   multiplayer/lobbyRoster.ts what the room view says while the lobby is open
   survival/SurvivalEngine.ts endless obstacle schedule, intensity, ejection, and recovery
   run/runOutcome.ts         what the summary screen says when a run ends
   run/runHud.ts             what the HUD says while a run is on
+  run/callBanner.ts         what the banner over the river says
   scenes/MenuScene.ts
   scenes/LobbyScene.ts
   scenes/RiverScene.ts
   ui/layout.ts              viewport-driven regions and type scale
+  ui/theme.ts               the palette, fonts, and text styles every scene draws with
+  ui/levelSelection.ts      the put-in screen's per-visit level cards
+  ui/raftMotion.ts          the raft's lane route and how fast it crosses
   ui/fontLoading.ts         gates boot until the bundled faces are usable
   ui/runClock.ts            the M:SS.CC run clock, shared by the HUD and the summary
   usage/usageEvents.ts      what the game reports about being played, and when it doesn't
