@@ -8,6 +8,7 @@ import {
   FONT_HEADING,
   headingStyle,
   hexToNumber,
+  numberToHex,
   RACER_COLORS,
   TEXT_COLORS,
 } from './theme'
@@ -93,5 +94,30 @@ describe('hexToNumber', () => {
   it('handles the extremes of the range', () => {
     expect(hexToNumber('#000000')).toBe(0x000000)
     expect(hexToNumber('#ffffff')).toBe(0xffffff)
+  })
+})
+
+describe('numberToHex', () => {
+  it('converts a palette number to the CSS hex string text is coloured with', () => {
+    expect(numberToHex(0xffc857)).toBe('#ffc857')
+  })
+
+  it('pads a dark colour to six digits rather than dropping its leading zeros', () => {
+    expect(numberToHex(COLORS.ink)).toBe('#071f26')
+    expect(numberToHex(0x000000)).toBe('#000000')
+  })
+
+  it('agrees with TEXT_COLORS wherever COLORS has the same entry', () => {
+    const numeric: Record<string, number> = COLORS
+    for (const [name, hex] of Object.entries(TEXT_COLORS)) {
+      if (!(name in numeric)) continue
+      expect(numberToHex(numeric[name]), `numberToHex(COLORS.${name})`).toBe(hex)
+    }
+  })
+
+  it('undoes hexToNumber for every racer colour the race rail labels', () => {
+    for (const color of RACER_COLORS) {
+      expect(hexToNumber(numberToHex(color))).toBe(color)
+    }
   })
 })

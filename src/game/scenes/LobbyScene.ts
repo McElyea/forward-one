@@ -16,6 +16,7 @@ import {
   COLORS,
   FONT_BODY,
   headingStyle,
+  numberToHex,
   TEXT_COLORS,
 } from '../ui/theme'
 
@@ -29,8 +30,6 @@ interface LobbyButton {
 }
 
 type LobbyViewObject = Phaser.GameObjects.Rectangle | Phaser.GameObjects.Text
-
-const colorHex = (color: number): string => `#${color.toString(16).padStart(6, '0')}`
 
 const messageFrom = (error: unknown): string =>
   error instanceof Error ? error.message : 'The room service could not complete that request'
@@ -323,9 +322,9 @@ export class LobbyScene extends Phaser.Scene {
     input.spellcheck = false
     input.style.position = 'absolute'
     input.style.zIndex = '10'
-    input.style.border = `2px solid ${colorHex(COLORS.waterLight)}`
+    input.style.border = `2px solid ${numberToHex(COLORS.waterLight)}`
     input.style.borderRadius = '6px'
-    input.style.background = colorHex(COLORS.ink)
+    input.style.background = numberToHex(COLORS.ink)
     input.style.color = TEXT_COLORS.cream
     input.style.fontFamily = FONT_BODY
     input.style.outline = 'none'
