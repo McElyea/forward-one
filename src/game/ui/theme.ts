@@ -4,13 +4,20 @@ export const COLORS = {
   ink: 0x071f26,
   inkSoft: 0x0d3037,
   control: 0x1a4a52,
+  /** Hover fill of a control, and the caption ink on a yellow button. */
+  controlDark: 0x16424a,
+  /** Panel, card and lane stroke. */
+  border: 0x31545a,
   cream: 0xf5f1df,
   muted: 0x9bb9b4,
+  mutedDark: 0x688e87,
   water: 0x167b91,
   waterLight: 0x55c3cc,
   bank: 0x2d5947,
   bankLight: 0x47775c,
   yellow: 0xffc857,
+  /** Hover fill of a yellow button. */
+  yellowHover: 0xffd979,
   danger: 0xe84a5f,
   warning: 0xff9f5a,
   success: 0x73e2a7,
@@ -21,6 +28,7 @@ export const COLORS = {
 
 export const TEXT_COLORS = {
   ink: '#071f26',
+  controlDark: '#16424a',
   cream: '#f5f1df',
   muted: '#9bb9b4',
   mutedDark: '#688e87',
@@ -54,7 +62,7 @@ export const RACER_COLORS = [
 export const FONT_HEADING = '"Barlow Condensed", Impact, sans-serif'
 export const FONT_BODY = 'Inter, Arial, sans-serif'
 
-export function headingStyle(size: number, color = '#f5f1df'): Phaser.Types.GameObjects.Text.TextStyle {
+export function headingStyle(size: number, color = TEXT_COLORS.cream): Phaser.Types.GameObjects.Text.TextStyle {
   return {
     fontFamily: FONT_HEADING,
     fontSize: `${size}px`,
@@ -63,7 +71,7 @@ export function headingStyle(size: number, color = '#f5f1df'): Phaser.Types.Game
   }
 }
 
-export function bodyStyle(size: number, color = '#f5f1df'): Phaser.Types.GameObjects.Text.TextStyle {
+export function bodyStyle(size: number, color = TEXT_COLORS.cream): Phaser.Types.GameObjects.Text.TextStyle {
   return {
     fontFamily: FONT_BODY,
     fontSize: `${size}px`,
@@ -73,4 +81,9 @@ export function bodyStyle(size: number, color = '#f5f1df'): Phaser.Types.GameObj
 
 export function hexToNumber(hex: string): number {
   return Number.parseInt(hex.replace('#', ''), 16)
+}
+
+/** The inverse of `hexToNumber()`: a palette number as the CSS string text and DOM styles take. */
+export function numberToHex(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`
 }
