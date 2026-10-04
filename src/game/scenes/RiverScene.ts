@@ -51,6 +51,7 @@ import {
   COLORS,
   headingStyle,
   hexToNumber,
+  numberToHex,
   TEXT_COLORS,
 } from '../ui/theme'
 
@@ -352,7 +353,7 @@ export class RiverScene extends Phaser.Scene {
       .rectangle(0, 0, 10, 10, COLORS.inkSoft, 1)
       .setOrigin(0)
       .setDepth(12)
-      .setStrokeStyle(2, 0x31545a, 1)
+      .setStrokeStyle(2, COLORS.border, 1)
       .setInteractive({ useHandCursor: true })
     const pauseLabel = this.add
       .text(0, 0, 'Ⅱ', headingStyle(type.heading, TEXT_COLORS.cream))
@@ -370,10 +371,10 @@ export class RiverScene extends Phaser.Scene {
     pauseButton.on('pointerdown', pause)
     pauseLabel.on('pointerdown', pause)
 
-    this.callText = this.add.text(0, 0, 'GET READY', headingStyle(type.hero, '#ffc857'))
+    this.callText = this.add.text(0, 0, 'GET READY', headingStyle(type.hero, TEXT_COLORS.yellow))
       .setOrigin(0.5)
       .setDepth(9)
-      .setShadow(0, 4, '#071f26', 7, true, true)
+      .setShadow(0, 4, TEXT_COLORS.ink, 7, true, true)
     this.callSubtext = this.add.text(0, 0, 'Listen for the guide', headingStyle(type.body, '#d7e8e1'))
       .setOrigin(0.5)
       .setDepth(9)
@@ -436,10 +437,10 @@ export class RiverScene extends Phaser.Scene {
       .setDepth(12)
       .setLetterSpacing(1.5)
     const railStart = this.add
-      .text(0, 0, 'PUT-IN', headingStyle(type.label, '#688e87'))
+      .text(0, 0, 'PUT-IN', headingStyle(type.label, TEXT_COLORS.mutedDark))
       .setDepth(12)
     const railFinish = this.add
-      .text(0, 0, 'LONGEST', headingStyle(type.label, '#688e87'))
+      .text(0, 0, 'LONGEST', headingStyle(type.label, TEXT_COLORS.mutedDark))
       .setDepth(12)
     this.raceOverflowText = this.add
       .text(0, 0, '', headingStyle(type.label, TEXT_COLORS.muted))
@@ -475,7 +476,7 @@ export class RiverScene extends Phaser.Scene {
       if (!layout.railVisible) this.raceOverflowText.setVisible(false)
     })
 
-    const escHint = this.add.text(0, 0, 'ESC  PAUSE', headingStyle(type.label, '#9bb9b4')).setDepth(20).setLetterSpacing(1)
+    const escHint = this.add.text(0, 0, 'ESC  PAUSE', headingStyle(type.label, TEXT_COLORS.muted)).setDepth(20).setLetterSpacing(1)
     this.onLayout((layout) => {
       escHint
         .setFontSize(Math.round(layout.type.label * 0.9))
@@ -502,7 +503,7 @@ export class RiverScene extends Phaser.Scene {
       .rectangle(0, 0, 10, 10, COLORS.inkSoft, 1)
       .setOrigin(0)
       .setDepth(51)
-      .setStrokeStyle(2, 0x31545a, 1)
+      .setStrokeStyle(2, COLORS.border, 1)
     const eyebrow = this.add
       .text(0, 0, 'RUN ON HOLD', headingStyle(type.label, TEXT_COLORS.muted))
       .setOrigin(0.5)
@@ -602,8 +603,8 @@ export class RiverScene extends Phaser.Scene {
     const color = direction === 'forward' ? COLORS.yellow : COLORS.waterLight
     const button = this.add.rectangle(0, 0, 10, 10, color, 1).setOrigin(0).setDepth(21)
     button.setInteractive({ useHandCursor: true })
-    const title = this.add.text(0, 0, label, headingStyle(this.layout.type.heading, '#071f26')).setDepth(22)
-    const keys = this.add.text(0, 0, keyLabel, headingStyle(this.layout.type.label, '#16424a')).setDepth(22)
+    const title = this.add.text(0, 0, label, headingStyle(this.layout.type.heading, TEXT_COLORS.ink)).setDepth(22)
+    const keys = this.add.text(0, 0, keyLabel, headingStyle(this.layout.type.label, TEXT_COLORS.controlDark)).setDepth(22)
 
     let restingAlpha = 1
 
@@ -805,7 +806,7 @@ export class RiverScene extends Phaser.Scene {
     // the river still reads underneath it.
     graphics.fillStyle(COLORS.ink, this.layout.controlsOverlay ? 0.74 : 0.91)
     graphics.fillRoundedRect(lane.x, lane.y, lane.width, lane.height, 14)
-    graphics.lineStyle(2, 0x31545a, 1)
+    graphics.lineStyle(2, COLORS.border, 1)
     graphics.strokeRoundedRect(lane.x, lane.y, lane.width, lane.height, 14)
 
     const midY = lane.y + lane.height / 2
@@ -813,11 +814,11 @@ export class RiverScene extends Phaser.Scene {
     const gateWidth = Math.max(48, lane.height * 0.58)
     const gateHeight = lane.height - inset * 2
     const pulse = elapsed < 0 ? 0 : (Math.sin(elapsed * 0.012) + 1) / 2
-    graphics.lineStyle(2, 0x688e87, 0.55)
+    graphics.lineStyle(2, COLORS.mutedDark, 0.55)
     graphics.lineBetween(lane.x + inset, midY, lane.x + lane.width - inset, midY)
     for (let index = 1; index < 8; index += 1) {
       const x = lane.x + (lane.width * index) / 8
-      graphics.lineStyle(2, 0x688e87, 0.36)
+      graphics.lineStyle(2, COLORS.mutedDark, 0.36)
       graphics.lineBetween(x, midY - 5, x, midY + 5)
     }
     graphics.fillStyle(COLORS.yellow, 0.1 + pulse * 0.06)
@@ -900,7 +901,7 @@ export class RiverScene extends Phaser.Scene {
     const axisTo = vertical ? rail.y + padStart : rail.x + rail.width - padEnd
     const cross = vertical ? rail.x + rail.width * 0.32 : rail.y + rail.height / 2
 
-    graphics.lineStyle(4, 0x31545a, 1)
+    graphics.lineStyle(4, COLORS.border, 1)
     if (vertical) {
       graphics.lineBetween(cross, axisFrom, cross, axisTo)
     } else {
@@ -959,7 +960,7 @@ export class RiverScene extends Phaser.Scene {
       graphics.strokeCircle(x, y, radius)
 
       const name = `racer-${racer.id}`
-      const color = `#${racer.color.toString(16).padStart(6, '0')}`
+      const color = numberToHex(racer.color)
       const labelText = racer.eliminated ? `${racer.name}  OUT` : racer.name
       const labelX = vertical ? cross + radius + 6 : labelAlong
       const labelY = vertical ? labelAlong : cross - radius - size * 1.1
@@ -1046,7 +1047,7 @@ export class RiverScene extends Phaser.Scene {
       this.callText
         .setText(countdown.headline)
         .setFontSize(Math.round(this.layout.type.hero * 1.2))
-        .setColor('#ffc857')
+        .setColor(TEXT_COLORS.yellow)
       this.callSubtext.setText(countdown.subtext)
     }
 
@@ -1226,7 +1227,7 @@ export class RiverScene extends Phaser.Scene {
       .rectangle(0, 0, 10, 10, COLORS.inkSoft, 1)
       .setOrigin(0)
       .setDepth(50)
-      .setStrokeStyle(2, 0x31545a, 1)
+      .setStrokeStyle(2, COLORS.border, 1)
     const eyebrow = this.add
       .text(
         0,
@@ -1327,7 +1328,7 @@ export class RiverScene extends Phaser.Scene {
     }
     retryButton.on('pointerdown', retry)
     retryLabel.on('pointerdown', retry)
-    retryButton.on('pointerover', () => retryButton.setFillStyle(0xffd979, 1))
+    retryButton.on('pointerover', () => retryButton.setFillStyle(COLORS.yellowHover, 1))
     retryButton.on('pointerout', () => retryButton.setFillStyle(COLORS.yellow, 1))
     const setup = (): void => this.returnToMenu()
     setupButton.on('pointerdown', setup)

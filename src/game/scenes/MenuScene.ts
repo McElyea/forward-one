@@ -104,16 +104,16 @@ export class MenuScene extends Phaser.Scene {
           0.97,
         )
         .setOrigin(0)
-        .setStrokeStyle(2, 0x31545a, 1)
+        .setStrokeStyle(2, COLORS.border, 1)
     }
 
-    this.add.text(this.layout.title.x, this.layout.title.y, 'FORWARD', headingStyle(type.hero, '#f5f1df'))
+    this.add.text(this.layout.title.x, this.layout.title.y, 'FORWARD', headingStyle(type.hero, TEXT_COLORS.cream))
       .setLetterSpacing(-2)
     this.add.text(
       this.layout.title.x + type.hero * 3.35,
       this.layout.title.y + type.hero * 0.08,
       'ONE',
-      headingStyle(type.heading, '#ffc857'),
+      headingStyle(type.heading, TEXT_COLORS.yellow),
     ).setLetterSpacing(5)
     this.add.text(
       this.layout.subtitle.x,
@@ -163,7 +163,7 @@ export class MenuScene extends Phaser.Scene {
       this.layout.detail.y + this.layout.detailLabel * 1.25,
       '',
       {
-        ...bodyStyle(type.body, '#9bb9b4'),
+        ...bodyStyle(type.body, TEXT_COLORS.muted),
         wordWrap: { width: this.layout.detail.width },
         lineSpacing: descriptionLineSpacing(type.body),
       },
@@ -264,7 +264,7 @@ export class MenuScene extends Phaser.Scene {
     graphics.closePath()
     graphics.fillPath()
 
-    graphics.lineStyle(3, 0x55c3cc, 0.34)
+    graphics.lineStyle(3, COLORS.waterLight, 0.34)
     const step = Math.max(48, height * 0.103)
     for (let y = height * 0.06; y < height; y += step) {
       graphics.beginPath()
@@ -278,7 +278,7 @@ export class MenuScene extends Phaser.Scene {
     for (let i = 0; i < 15; i += 1) {
       const x = px(0.563) + ((i * 83) % Math.max(1, width * 0.43))
       const y = py(0.035) + ((i * 137) % Math.max(1, height * 0.944))
-      graphics.fillStyle(i % 2 ? 0x47775c : 0x2d5947, 0.8)
+      graphics.fillStyle(i % 2 ? COLORS.bankLight : COLORS.bank, 0.8)
       graphics.fillCircle(x, y, Math.max(6, width * 0.01) + (i % 3) * 4)
     }
   }
@@ -300,7 +300,7 @@ export class MenuScene extends Phaser.Scene {
         text.classLabel.x,
         text.classLabel.y,
         'CLASS',
-        headingStyle(text.classLabel.size, '#9bb9b4'),
+        headingStyle(text.classLabel.size, TEXT_COLORS.muted),
       )
       .setLetterSpacing(1.5)
     const number = this.add.text(
@@ -313,14 +313,14 @@ export class MenuScene extends Phaser.Scene {
       text.name.x,
       text.name.y,
       level.name.toUpperCase(),
-      headingStyle(text.name.size, '#f5f1df'),
+      headingStyle(text.name.size, TEXT_COLORS.cream),
     )
 
     background.on('pointerdown', () => {
       this.levelSelection.select(level)
       this.renderSelection()
     })
-    background.on('pointerover', () => background.setFillStyle(0x16424a, 1))
+    background.on('pointerover', () => background.setFillStyle(COLORS.controlDark, 1))
     background.on('pointerout', () => background.setFillStyle(COLORS.inkSoft, 0.96))
 
     card.add([background, classLabel, number, name])
@@ -329,7 +329,7 @@ export class MenuScene extends Phaser.Scene {
 
   private renderSelection(): void {
     for (const { level, view, selected } of this.levelSelection.entries()) {
-      view.setStrokeStyle(2, selected ? hexToNumber(level.accent) : 0x31545a, selected ? 1 : 0.8)
+      view.setStrokeStyle(2, selected ? hexToNumber(level.accent) : COLORS.border, selected ? 1 : 0.8)
     }
 
     const selectedLevel = this.levelSelection.selected
@@ -386,7 +386,7 @@ export class MenuScene extends Phaser.Scene {
       const selected = button.mode === this.selectedMode
       button.background
         .setFillStyle(selected ? COLORS.control : COLORS.inkSoft, 1)
-        .setStrokeStyle(selected ? 3 : 2, selected ? COLORS.waterLight : 0x31545a, 1)
+        .setStrokeStyle(selected ? 3 : 2, selected ? COLORS.waterLight : COLORS.border, 1)
       button.title.setColor(selected ? TEXT_COLORS.waterLight : TEXT_COLORS.cream)
       button.subtitle.setColor(selected ? TEXT_COLORS.cream : TEXT_COLORS.muted)
     }
@@ -421,7 +421,7 @@ export class MenuScene extends Phaser.Scene {
     button.on('pointerdown', start)
     label.on('pointerdown', start)
     arrow.on('pointerdown', start)
-    button.on('pointerover', () => button.setFillStyle(0xffd979, 1))
+    button.on('pointerover', () => button.setFillStyle(COLORS.yellowHover, 1))
     button.on('pointerout', () => button.setFillStyle(COLORS.yellow, 1))
   }
 
@@ -549,20 +549,20 @@ export class MenuScene extends Phaser.Scene {
     this.add
       .rectangle(voicePanel.x, voicePanel.y, voicePanel.width, voicePanel.height, 0x102f36, 1)
       .setOrigin(0)
-      .setStrokeStyle(2, 0x31545a, 1)
+      .setStrokeStyle(2, COLORS.border, 1)
     this.add
       .text(
         voicePanel.x + Math.round(voicePanel.width * 0.03),
         voicePanel.y + Math.round(type.label * 0.28),
         this.layout.mode === 'portrait' ? 'GUIDE VOICE' : 'GUIDE VOICE  /  SELECT + PREVIEW',
-        headingStyle(Math.round(type.label * 0.82), '#9bb9b4'),
+        headingStyle(Math.round(type.label * 0.82), TEXT_COLORS.muted),
       )
       .setLetterSpacing(1)
 
     GUIDE_VOICES.forEach((voice, index) => {
       const rect = voiceButtons[index]
       const background = this.add
-        .rectangle(rect.x, rect.y, rect.width, rect.height, 0x1a4a52, 1)
+        .rectangle(rect.x, rect.y, rect.width, rect.height, COLORS.control, 1)
         .setOrigin(0)
         .setInteractive({ useHandCursor: true })
       const label = this.add
@@ -610,8 +610,8 @@ export class MenuScene extends Phaser.Scene {
   private renderVoiceSelection(): void {
     for (const button of this.voiceButtons) {
       const selected = button.voiceId === this.selectedVoiceId
-      button.background.setFillStyle(selected ? COLORS.yellow : 0x1a4a52, 1)
-      button.label.setColor(selected ? '#071f26' : '#f5f1df')
+      button.background.setFillStyle(selected ? COLORS.yellow : COLORS.control, 1)
+      button.label.setColor(selected ? TEXT_COLORS.ink : TEXT_COLORS.cream)
     }
   }
 
