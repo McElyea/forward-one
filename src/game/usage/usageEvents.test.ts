@@ -39,6 +39,8 @@ describe('shouldReportUsage', () => {
     expect(shouldReportUsage({ ...deployed, dev: true })).toBe(false)
     expect(shouldReportUsage({ ...deployed, hostname: 'localhost' })).toBe(false)
     expect(shouldReportUsage({ ...deployed, hostname: '127.0.0.1' })).toBe(false)
+    expect(shouldReportUsage({ ...deployed, hostname: '[::1]' }), 'IPv6 loopback').toBe(false)
+    expect(shouldReportUsage({ ...deployed, hostname: '0.0.0.0' }), 'all-interfaces bind').toBe(false)
     expect(shouldReportUsage({ ...deployed, hostname: 'dans-laptop.local' })).toBe(false)
   })
 })
@@ -53,6 +55,11 @@ describe('referrerHost', () => {
     expect(referrerHost('https://fwdone.com/', 'fwdone.com')).toBe('')
     expect(referrerHost('', 'fwdone.com')).toBe('')
     expect(referrerHost('not a url', 'fwdone.com')).toBe('')
+  })
+
+  it('caps a referring host at the 120 characters the relay accepts', () => {
+    const longHost = `${'a'.repeat(50)}.${'b'.repeat(50)}.${'c'.repeat(50)}.com`
+    expect(referrerHost(`https://${longHost}/page`, 'fwdone.com')).toBe(longHost.slice(0, 120))
   })
 })
 
@@ -86,6 +93,28 @@ describe('visitEvent', () => {
       fonts: 'loaded',
     })
   })
+
+  it('reports a pointer device in landscape with a direct visit', () => {
+    expect(
+      visitEvent({
+        touch: false,
+        width: 1440,
+        height: 900,
+        referrer: '',
+        ownHost: 'fwdone.com',
+        returning: true,
+        fonts: 'timed-out',
+      }),
+    ).toEqual({
+      type: 'visit',
+      device: 'pointer',
+      orientation: 'landscape',
+      viewport: '1440x900',
+      referrer: '',
+      returning: true,
+      fonts: 'timed-out',
+    })
+  })
 })
 
 describe('runStartedEvent', () => {
@@ -93,6 +122,24 @@ describe('runStartedEvent', () => {
     expect(
       runStartedEvent({ levelName: 'Grand Canyon', rapidClass: 4, mode: 'solo', voiceName: 'Bella', touch: false }),
     ).toEqual({ type: 'run-started', level: 'Grand Canyon', rapidClass: 4, mode: 'solo', voice: 'Bella', device: 'pointer' })
+  })
+
+  it('reports a touch device', () => {
+    expect(
+      runStartedEvent({ levelName: 'Grand Canyon', rapidClass: 4, mode: 'solo', voiceName: 'Bella', touch: true }).device,
+    ).toBe('touch')
+  })
+
+  it('caps the level and voice names at what the relay accepts', () => {
+    const event = runStartedEvent({
+      levelName: 'L'.repeat(80),
+      rapidClass: 4,
+      mode: 'solo',
+      voiceName: 'V'.repeat(40),
+      touch: false,
+    })
+    expect(event.level, 'level name').toBe('L'.repeat(60))
+    expect(event.voice, 'voice name').toBe('V'.repeat(24))
   })
 })
 
@@ -130,6 +177,10 @@ describe('runEndedEvent', () => {
     expect(event.points).toBe(13)
     expect(runEndedEvent({ ...base, place: 40 }).place).toBe(8)
   })
+
+  it('caps the level name at what the relay accepts', () => {
+    expect(runEndedEvent({ ...base, levelName: 'L'.repeat(80) }).level).toBe('L'.repeat(60))
+  })
 })
 
 describe('runEndReason', () => {
@@ -146,6 +197,49 @@ describe('errorEvent / describeThrown', () => {
     expect(event.message).toBe('Unknown error')
     expect(event.source).toHaveLength(200)
     expect(event.stack).toHaveLength(1500)
+  })
+
+  it('caps the message, user agent and page address too', () => {
+    const event = errorEvent({
+      message: 'm'.repeat(400),
+      source: '',
+      stack: '',
+      userAgent: 'u'.repeat(400),
+      url: 'p'.repeat(400),
+    })
+    expect(event.message, 'message').toHaveLength(300)
+    expect(event.userAgent, 'user agent').toHaveLength(300)
+    expect(event.url, 'page address').toHaveLength(200)
+  })
+
+  it('passes a short error through unchanged', () => {
+    expect(
+      errorEvent({
+        message: 'TypeError: bad',
+        source: 'main.js:1:2',
+        stack: 'at main.js:1:2',
+        userAgent: 'Firefox',
+        url: 'https://fwdone.com/',
+      }),
+    ).toEqual({
+      type: 'error',
+      message: 'TypeError: bad',
+      source: 'main.js:1:2',
+      stack: 'at main.js:1:2',
+      userAgent: 'Firefox',
+      url: 'https://fwdone.com/',
+    })
+  })
+
+  it('reports an empty stack for an error that carries none', () => {
+    const stackless = new Error('lost')
+    stackless.stack = undefined
+    expect(describeThrown(stackless)).toEqual({ message: 'Error: lost', stack: '' })
+  })
+
+  it('treats an object whose message is not text, and null, as a non-error', () => {
+    expect(describeThrown({ message: 42 })).toEqual({ message: 'Non-error thrown: [object Object]', stack: '' })
+    expect(describeThrown(null)).toEqual({ message: 'Non-error thrown: null', stack: '' })
   })
 
   it('describes whatever was thrown', () => {
