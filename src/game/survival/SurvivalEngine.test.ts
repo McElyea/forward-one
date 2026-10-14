@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { HIT_WINDOW_MS } from '../rhythm/RhythmEngine'
 import type { LevelConfig, StrokeRating } from '../types'
 import { SurvivalEngine, survivalIntensity } from './SurvivalEngine'
 
@@ -282,5 +283,118 @@ describe('SurvivalEngine, at its edges', () => {
 
   it('reads a clock before the start as the start', () => {
     expect(survivalIntensity(2, -10_000)).toBe(survivalIntensity(2, 0))
+  })
+})
+
+describe('SurvivalEngine schedule floors', () => {
+  it('never opens with a call before the paddler has had a moment', () => {
+    const survival = new SurvivalEngine({
+      ...LEVEL,
+      cues: [{ at: 500, direction: 'forward', strokes: 1 }],
+    })
+
+    expect(survival.ensureScheduledThrough(1_799), 'a call landed in the first 1.8s').toEqual([])
+    expect(survival.ensureScheduledThrough(1_800).map((event) => event.cue.at)).toEqual([1_800])
+  })
+
+  it('never packs the strokes of one call tighter than the floor', () => {
+    const survival = new SurvivalEngine({
+      ...LEVEL,
+      cues: [{ at: 3_000, direction: 'forward', strokes: 3, interval: 100 }],
+    })
+
+    const [first] = survival.ensureScheduledThrough(3_000)
+
+    expect(first.cue.interval, 'the authored 100ms interval was used as-is').toBe(280)
+    expect(first.resolveAt).toBe(3_000 + 2 * 280 + HIT_WINDOW_MS)
+  })
+
+  it('leaves a breather after a call, however close the next one was authored', () => {
+    const survival = new SurvivalEngine({
+      ...LEVEL,
+      cues: [
+        { at: 3_000, direction: 'forward', strokes: 3, interval: 500 },
+        { at: 3_100, direction: 'backward', strokes: 1 },
+      ],
+    })
+    survival.ensureScheduledThrough(10_000)
+    const [first, second] = survival.events
+    const lastStrokeAt = first.resolveAt - HIT_WINDOW_MS
+
+    expect(second.cue.at - lastStrokeAt, 'the next call overlapped the last stroke').toBe(620)
+  })
+})
+
+describe('SurvivalEngine scheduling and settling', () => {
+  it('returns only the calls each pass newly scheduled', () => {
+    const survival = new SurvivalEngine(LEVEL)
+
+    const early = survival.ensureScheduledThrough(10_000)
+    expect(survival.ensureScheduledThrough(10_000), 'a repeat pass rescheduled calls').toEqual([])
+
+    const later = survival.ensureScheduledThrough(20_000)
+    expect(later.length).toBeGreaterThan(0)
+    expect(later[0].cueIndex).toBe(early.length)
+    expect(survival.events).toEqual([...early, ...later])
+  })
+
+  it('rotates the obstacles, starting harder classes further along', () => {
+    const classTwo = new SurvivalEngine(LEVEL)
+    classTwo.ensureScheduledThrough(20_000)
+    const classThree = new SurvivalEngine({ ...LEVEL, rapidClass: 3 })
+    classThree.ensureScheduledThrough(20_000)
+
+    expect(classTwo.events.slice(0, 5).map((event) => event.obstacle)).toEqual([
+      'strainer',
+      'rapid',
+      'rock',
+      'current',
+      'strainer',
+    ])
+    expect(classThree.events[0].obstacle).toBe('rapid')
+  })
+
+  it('treats a wrong-way stroke as a failed call, settled only at the collision', () => {
+    const survival = new SurvivalEngine(LEVEL)
+    survival.ensureScheduledThrough(10_000)
+    const first = survival.events[0]
+
+    recordCue(survival, 0, first.cue.strokes, 'wrong')
+
+    expect(survival.resolveThrough(first.resolveAt + 1), 'a failed call settled early').toEqual([])
+    expect(survival.resolveThrough(first.collisionAt + 1).map(({ type }) => type)).toEqual([
+      'impact',
+    ])
+  })
+
+  it('settles a landed call at once and stops calling it', () => {
+    const survival = new SurvivalEngine(LEVEL)
+    survival.ensureScheduledThrough(10_000)
+    const first = survival.events[0]
+
+    expect(survival.getCurrentCall(first.cue.at)).toBe(first)
+    recordCue(survival, 0, first.cue.strokes, 'perfect')
+    survival.resolveThrough(first.cue.at)
+
+    expect(
+      survival.getCurrentCall(first.cue.at),
+      'a settled call was still being called',
+    ).toBeUndefined()
+  })
+
+  it('settles a backlog of missed calls in order, ending where the river wins', () => {
+    const survival = new SurvivalEngine(LEVEL)
+    survival.ensureScheduledThrough(60_000)
+
+    const transitions = survival.resolveThrough(survival.events[6].collisionAt + 1)
+
+    expect(transitions.map(({ type }) => type)).toEqual([
+      'impact',
+      'impact',
+      'ejected',
+      'drifted',
+      'swept-away',
+    ])
+    expect(transitions.map(({ event }) => event.cueIndex)).toEqual([0, 1, 2, 3, 4])
   })
 })
