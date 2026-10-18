@@ -52,8 +52,8 @@ class FakeChannel {
   async track(): Promise<void> {}
   async untrack(): Promise<void> {}
 
-  readonly sent: { event: string }[] = []
-  async send(message: { event: string }): Promise<void> {
+  readonly sent: { event: string; payload?: unknown }[] = []
+  async send(message: { event: string; payload?: unknown }): Promise<void> {
     this.sent.push(message)
   }
 
@@ -97,6 +97,24 @@ const refusingRpc = async (): Promise<RpcResponse> => ({
   data: null,
   error: { message: 'room service refused' },
 })
+
+/** A room as the room service sends it back: ISO times, not unix milliseconds. */
+const wireRoom = (overrides: Record<string, unknown> = {}) => ({
+  id: 'room-id',
+  code: 'RAFT23',
+  levelId: 'class-ii',
+  maxPlayers: 8,
+  hostPlayerId: HOST_ID,
+  matchmaking: false,
+  state: 'countdown',
+  serverNow: '2026-08-29T12:00:00.000Z',
+  startsAt: '2026-08-29T12:00:06.000Z',
+  members: [],
+  ...overrides,
+})
+
+/** An RPC that answers every call with the given room. */
+const answering = (data: unknown) => async (): Promise<RpcResponse> => ({ data, error: null })
 
 /** Lets the handlers a broadcast fired without awaiting run to completion. */
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
@@ -211,6 +229,124 @@ describe('the heartbeat', () => {
 
     expect(intervals.periods).toEqual([20_000])
   })
+
+  it('slows to the room beat once a re-read finds the start scheduled', async () => {
+    const { connection, channel, intervals } = await connectTo(
+      LOCAL_ID,
+      room({ matchmaking: true }),
+      answering(wireRoom({ matchmaking: true })),
+    )
+    const starts: number[] = []
+    connection.onStart((startsAtUnixMs) => starts.push(startsAtUnixMs))
+
+    channel.broadcast('room-changed', {})
+    await settle()
+
+    expect(intervals.periods).toEqual([2_000, 20_000])
+    expect(intervals.running, 'the fast poll is cleared, not left running').toBe(1)
+    expect(starts).toEqual([SERVER_START])
+  })
+
+  it('keeps polling quickly while a re-read finds no start yet', async () => {
+    const { connection, channel, intervals } = await connectTo(
+      LOCAL_ID,
+      room({ matchmaking: true }),
+      answering(wireRoom({ matchmaking: true, state: 'lobby', startsAt: null })),
+    )
+    const starts: number[] = []
+    connection.onStart((startsAtUnixMs) => starts.push(startsAtUnixMs))
+
+    channel.broadcast('room-changed', {})
+    await settle()
+
+    expect(intervals.periods).toEqual([2_000])
+    expect(starts).toEqual([])
+  })
+
+  it('does not restart the beat for a start it already had', async () => {
+    const { connection, channel, intervals } = await connectTo(
+      LOCAL_ID,
+      room({ state: 'countdown', startsAtUnixMs: SERVER_START }),
+      answering(wireRoom()),
+    )
+    const starts: number[] = []
+    connection.onStart((startsAtUnixMs) => starts.push(startsAtUnixMs))
+
+    channel.broadcast('room-changed', {})
+    await settle()
+
+    expect(intervals.periods).toEqual([20_000])
+    expect(starts, 'only the late-listener replay, no second start').toEqual([SERVER_START])
+  })
+})
+
+describe('starting the race', () => {
+  const everyoneReady = presence(
+    { playerId: HOST_ID, name: 'HOST', ready: true },
+    { playerId: LOCAL_ID, name: 'RIVER RAT', ready: true },
+  )
+
+  it('refuses without asking the room service while a paddler is not ready', async () => {
+    const calls: string[] = []
+    const recording = async (): Promise<RpcResponse> => {
+      calls.push('rpc')
+      return { data: wireRoom(), error: null }
+    }
+    const { connection, channel } = await connectTo(HOST_ID, room(), recording)
+    channel.syncPresence(
+      presence(
+        { playerId: HOST_ID, name: 'HOST', ready: true },
+        { playerId: LOCAL_ID, name: 'RIVER RAT', ready: false },
+      ),
+    )
+
+    await expect(connection.startRace()).rejects.toThrow('Every connected paddler must be ready')
+    expect(calls).toEqual([])
+  })
+
+  it('refuses a paddler who is not the host', async () => {
+    const { connection, channel } = await connectTo(LOCAL_ID, room(), answering(wireRoom()))
+    channel.syncPresence(everyoneReady)
+
+    await expect(connection.startRace()).rejects.toThrow('Every connected paddler must be ready')
+  })
+
+  it('broadcasts the start time the room service scheduled', async () => {
+    const { connection, channel } = await connectTo(HOST_ID, room(), answering(wireRoom()))
+    channel.syncPresence(everyoneReady)
+
+    await connection.startRace()
+
+    expect(channel.sent.at(-1)).toEqual({
+      type: 'broadcast',
+      event: 'race-start',
+      payload: { startsAtUnixMs: SERVER_START },
+    })
+  })
+
+  it('tells its own listeners, since its broadcast does not echo back', async () => {
+    const { connection, channel } = await connectTo(HOST_ID, room(), answering(wireRoom()))
+    channel.syncPresence(everyoneReady)
+    const starts: number[] = []
+    const states: string[] = []
+    connection.onStart((startsAtUnixMs) => starts.push(startsAtUnixMs))
+    connection.onLobbyChange((snapshot) => states.push(snapshot.room.state))
+
+    await connection.startRace()
+
+    expect(starts).toEqual([SERVER_START])
+    expect(states.at(-1)).toBe('countdown')
+    expect(connection.startsAtUnixMs).toBe(SERVER_START)
+  })
+
+  it('broadcasts nothing when the room service refuses the start', async () => {
+    const { connection, channel } = await connectTo(HOST_ID)
+    channel.syncPresence(everyoneReady)
+    const sentBefore = channel.sent.length
+
+    await expect(connection.startRace()).rejects.toThrow('room service refused')
+    expect(channel.sent.length).toBe(sentBefore)
+  })
 })
 
 describe('the scheduled start', () => {
@@ -284,22 +420,7 @@ describe('broadcasts from other paddlers', () => {
   })
 
   it('prefers the start time the room service holds over the broadcast one', async () => {
-    const reread = async (): Promise<RpcResponse> => ({
-      data: {
-        id: 'room-id',
-        code: 'RAFT23',
-        levelId: 'class-ii',
-        maxPlayers: 8,
-        hostPlayerId: HOST_ID,
-        matchmaking: false,
-        state: 'countdown',
-        serverNow: '2026-08-29T12:00:00.000Z',
-        startsAt: '2026-08-29T12:00:06.000Z',
-        members: [],
-      },
-      error: null,
-    })
-    const { connection, channel } = await connectTo(LOCAL_ID, room(), reread)
+    const { connection, channel } = await connectTo(LOCAL_ID, room(), answering(wireRoom()))
     const starts: number[] = []
     connection.onStart((startsAtUnixMs) => starts.push(startsAtUnixMs))
 
