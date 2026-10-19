@@ -47,4 +47,49 @@ describe('selectRailRacers', () => {
       'RACER 4',
     ])
   })
+
+  it('ranks the racers even when none of them are trimmed', () => {
+    const racers = [racer(3), racer(1, true), racer(2)]
+
+    expect(selectRailRacers(racers, 8).map((entry) => entry.name)).toEqual([
+      'YOU',
+      'RACER 2',
+      'RACER 3',
+    ])
+  })
+
+  it('fills behind a local paddler who is leading', () => {
+    // The leader and the local paddler are the same slot, so every other place
+    // goes to the racers chasing them.
+    const racers = Array.from({ length: 12 }, (_, index) => racer(index + 1, index === 0))
+
+    expect(selectRailRacers(racers, 4).map((entry) => entry.name)).toEqual([
+      'YOU',
+      'RACER 2',
+      'RACER 3',
+      'RACER 4',
+    ])
+  })
+
+  it('fills ahead of a local paddler in last place', () => {
+    const racers = Array.from({ length: 12 }, (_, index) => racer(index + 1, index === 11))
+
+    expect(selectRailRacers(racers, 4).map((entry) => entry.name)).toEqual([
+      'RACER 1',
+      'RACER 10',
+      'RACER 11',
+      'YOU',
+    ])
+  })
+
+  it('refuses a rail with room for fewer than two racers', () => {
+    const racers = [racer(1, true), racer(2)]
+
+    for (const maximumVisible of [1, 0, -2, 2.5, Number.NaN]) {
+      expect(
+        () => selectRailRacers(racers, maximumVisible),
+        `a rail of ${maximumVisible} was accepted`,
+      ).toThrow('A race rail needs room for at least two racers')
+    }
+  })
 })

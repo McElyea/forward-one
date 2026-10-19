@@ -185,4 +185,18 @@ describe('lobbyRoster with more paddlers than lines', () => {
 
     expect(view.lines).toEqual(['+ 3 MORE PADDLERS'])
   })
+
+  it('reads a negative limit as no room at all', () => {
+    const view = lobbyRoster(crowd(3), { ...roomy, lineLimit: -2 })
+
+    expect(view.lines).toEqual(['+ 3 MORE PADDLERS'])
+  })
+
+  it('does not count zero paddlers past a negative limit', () => {
+    // Unclamped, an empty roster is "longer" than a limit below zero and would
+    // be reported as overflowing by nobody.
+    const view = lobbyRoster(crowd(0), { ...roomy, lineLimit: -2 })
+
+    expect(view.lines, 'an empty roster grew an overflow line').toEqual([])
+  })
 })
