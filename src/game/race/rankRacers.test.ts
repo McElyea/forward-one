@@ -37,6 +37,31 @@ describe('rankRacers', () => {
     expect(ranked.map(({ id }) => id)).toEqual(['maya', 'eli', 'jo'])
   })
 
+  it('ranks active racers by survival time among themselves', () => {
+    const ranked = rankRacers([
+      racer('jo', 10_000, false),
+      racer('eli', 40_000, true),
+      racer('maya', 25_000, false),
+    ])
+
+    expect(ranked.map(({ id }) => id)).toEqual(['maya', 'jo', 'eli'])
+  })
+
+  it('keeps snapshot order for racers tied on status and survival time', () => {
+    const ranked = rankRacers([
+      racer('jo', 20_000, false),
+      racer('local', 20_000, false),
+      racer('eli', 9_000, true),
+      racer('maya', 9_000, true),
+    ])
+
+    expect(ranked.map(({ id }) => id)).toEqual(['jo', 'local', 'eli', 'maya'])
+  })
+
+  it('returns an empty ranking for an empty field', () => {
+    expect(rankRacers([])).toEqual([])
+  })
+
   it('does not reorder the adapter snapshot array in place', () => {
     const snapshots = [racer('local', 12_000, true), racer('maya', 12_000, false)]
 

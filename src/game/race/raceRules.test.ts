@@ -43,6 +43,28 @@ describe('race timing', () => {
     expect(raceClockMs('multiplayer', 72_000)).toBe(0)
   })
 
+  it('counts the preview race down on the same one-minute clock', () => {
+    expect(raceClockMs('multiplayer-preview', 0)).toBe(60_000)
+    expect(raceClockMs('multiplayer-preview', 45_250)).toBe(14_750)
+    expect(raceTimeExpired('multiplayer-preview', 59_999)).toBe(false)
+    expect(raceTimeExpired('multiplayer-preview', 60_000)).toBe(true)
+  })
+
+  it('clamps a negative elapsed time to the start of the run', () => {
+    expect(raceElapsedMs('solo', -500)).toBe(0)
+    expect(raceElapsedMs('multiplayer', -500)).toBe(0)
+    expect(raceClockMs('solo', -500)).toBe(0)
+    expect(raceClockMs('multiplayer', -500), 'a race clock must not read above the limit')
+      .toBe(RACE_TIME_LIMIT_MS)
+  })
+
+  it('treats a non-finite elapsed time as the start of the run', () => {
+    expect(raceElapsedMs('solo', Number.NaN)).toBe(0)
+    expect(raceElapsedMs('multiplayer', Number.NaN)).toBe(0)
+    expect(raceClockMs('multiplayer', Number.NaN)).toBe(RACE_TIME_LIMIT_MS)
+    expect(raceTimeExpired('multiplayer', Number.NaN)).toBe(false)
+  })
+
   it('treats connected survivors as the time-limit leaders', () => {
     expect(timeLimitLeaders([
       racer('local'),
@@ -50,5 +72,14 @@ describe('race timing', () => {
       racer('eli', true),
       racer('jo', false, false),
     ]).map(({ id }) => id)).toEqual(['local', 'maya'])
+  })
+
+  it('names no leader when every paddler is out or disconnected', () => {
+    expect(timeLimitLeaders([
+      racer('eli', true),
+      racer('jo', false, false),
+      racer('sam', true, false),
+    ])).toEqual([])
+    expect(timeLimitLeaders([])).toEqual([])
   })
 })
