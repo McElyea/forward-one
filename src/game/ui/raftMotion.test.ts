@@ -13,6 +13,27 @@ describe('raft lanes', () => {
     expect(raftLaneTarget(5)).toBe(-1)
   })
 
+  it('mirrors negative cue indexes onto the same route', () => {
+    expect(raftLaneTarget(-1), 'cue -1 reads route slot 1').toBe(0)
+    expect(raftLaneTarget(-3), 'cue -3 reads route slot 3').toBe(-0.5)
+    expect(raftLaneTarget(-6), 'cue -6 wraps to route slot 1').toBe(0)
+  })
+
+  it('truncates fractional cue indexes toward zero', () => {
+    expect(raftLaneTarget(2.9)).toBe(raftLaneTarget(2))
+    expect(raftLaneTarget(-2.9)).toBe(raftLaneTarget(2))
+    expect(raftLaneTarget(-0.5), 'truncates to -0, which reads route slot 0').toBe(-1)
+  })
+
+  it('keeps the obstacle centred for the first cue and anything before it', () => {
+    expect(obstacleLaneTarget(-1)).toBe(0)
+    expect(obstacleLaneTarget(-4)).toBe(0)
+  })
+
+  it('reads the previous route slot for a fractional cue past zero', () => {
+    expect(obstacleLaneTarget(0.5), 'cue 0.5 reads raftLaneTarget(-0.5)').toBe(-1)
+  })
+
   it('puts each obstacle in the lane the raft is leaving', () => {
     expect(obstacleLaneTarget(0)).toBe(0)
     for (let cueIndex = 1; cueIndex < 8; cueIndex += 1) {
@@ -23,6 +44,20 @@ describe('raft lanes', () => {
   it('slows down longer crossings', () => {
     expect(raftLaneCrossingDuration(0, 0.5)).toBe(475)
     expect(raftLaneCrossingDuration(-1, 1)).toBe(760)
+  })
+
+  it('takes the base time for a crossing that goes nowhere', () => {
+    expect(raftLaneCrossingDuration(0.5, 0.5)).toBe(380)
+  })
+
+  it('times a crossing by distance alone, whichever way it runs', () => {
+    expect(raftLaneCrossingDuration(1, -1)).toBe(raftLaneCrossingDuration(-1, 1))
+    expect(raftLaneCrossingDuration(0.25, 0)).toBe(427.5)
+  })
+
+  it('caps the crossing time at a full-width crossing', () => {
+    expect(raftLaneCrossingDuration(-2, 1), 'a distance of 3 is capped at 2').toBe(760)
+    expect(raftLaneCrossingDuration(3, -1), 'a distance of 4 is capped at 2').toBe(760)
   })
 
   it('starts a dodge on the first successful stroke for a cue', () => {
@@ -40,6 +75,26 @@ describe('raft lanes', () => {
 
     expect(raftDodgeCueIndex(successful, 2)).toBe(3)
     expect(raftDodgeCueIndex(successful, 3)).toBeUndefined()
+  })
+
+  it('dodges for cue 0, which is a real cue and not a missing one', () => {
+    const firstCue = {
+      target: {
+        id: '0-0',
+        cueIndex: 0,
+        strokeIndex: 0,
+        direction: 'forward' as const,
+        targetTime: 1_000,
+        status: 'perfect' as const,
+      },
+      points: 100,
+    }
+
+    expect(raftDodgeCueIndex(firstCue, -1)).toBe(0)
+  })
+
+  it('does not dodge without a target, even when points are awarded', () => {
+    expect(raftDodgeCueIndex({ target: null, points: 50 }, 2)).toBeUndefined()
   })
 
   it('does not move lanes for a miss or wrong-direction stroke', () => {
