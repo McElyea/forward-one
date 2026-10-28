@@ -48,6 +48,23 @@ describe('placeLabel', () => {
       '64TH',
     ])
   })
+
+  it('takes the suffix from the last two digits past a hundred', () => {
+    expect([101, 102, 103, 104, 111, 112, 113, 121].map(placeLabel)).toEqual([
+      '101ST',
+      '102ND',
+      '103RD',
+      '104TH',
+      '111TH',
+      '112TH',
+      '113TH',
+      '121ST',
+    ])
+  })
+
+  it('falls back to a numeric ordinal below the named places', () => {
+    expect(placeLabel(0)).toBe('0TH')
+  })
 })
 
 describe('runOutcome', () => {
@@ -78,6 +95,27 @@ describe('runOutcome', () => {
 
   it('names the level the run was actually on', () => {
     expect(runOutcome('solo', 1, 1_000, 'No Mistakes').blurb).toContain('on No Mistakes')
+  })
+
+  it('ends a race blurb with the last-paddler rule', () => {
+    expect(runOutcome('multiplayer', 3, 25_400, 'The Narrows').blurb).toBe(
+      'THIRD after 25 seconds on The Narrows. The last paddler in the water wins.',
+    )
+  })
+
+  it('uses the numeric ordinal in both race lines past fourth place', () => {
+    const outcome = runOutcome('multiplayer', 5, 12_000, 'Broken Water')
+
+    expect(outcome.heading).toBe('5TH PLACE')
+    expect(outcome.blurb.startsWith('5TH after 12 seconds')).toBe(true)
+  })
+
+  it('passes the place through unchanged, even in a solo run', () => {
+    expect(runOutcome('solo', 3, 1_000, 'Warm-up Run')).toMatchObject({
+      place: 3,
+      placeLabel: 'THIRD',
+      heading: 'SWEPT AWAY',
+    })
   })
 })
 
@@ -116,5 +154,65 @@ describe('timeLimitOutcome', () => {
       60_000,
       'Warm-up Run',
     ).heading).toBe('YOU WIN')
+  })
+
+  it('tells the sole survivor they were the only paddler afloat', () => {
+    expect(timeLimitOutcome([racer('you', true)], 60_900, 'Broken Water').blurb).toBe(
+      'Time expired after 60 seconds on Broken Water. You were the only paddler still afloat.',
+    )
+  })
+
+  it('reports no time at all rather than a negative one when time expires', () => {
+    const outcome = timeLimitOutcome(
+      [racer('you', true), racer('maya', false)],
+      -1_000,
+      'The Narrows',
+    )
+
+    expect(outcome.blurb).toContain('after 0 seconds')
+  })
+
+  it('ranks an eliminated local paddler by survival time behind the survivors', () => {
+    const local = { ...racer('you', true), eliminated: true, survivalMs: 30_000 }
+    const maya = { ...racer('maya', false), survivalMs: 60_000 }
+    const eli = { ...racer('eli', false), eliminated: true, survivalMs: 20_000 }
+
+    expect(timeLimitOutcome([eli, local, maya], 60_000, 'Broken Water')).toEqual({
+      place: 2,
+      placeLabel: 'SECOND',
+      heading: 'SECOND PLACE',
+      blurb: 'SECOND after 60 seconds on Broken Water. The last paddler in the water wins.',
+    })
+  })
+
+  it('does not count a disconnected local paddler as a leader', () => {
+    const local = { ...racer('you', true), connected: false, survivalMs: 10_000 }
+    const maya = { ...racer('maya', false), survivalMs: 60_000 }
+
+    expect(timeLimitOutcome([local, maya], 60_000, 'Warm-up Run')).toMatchObject({
+      place: 2,
+      heading: 'SECOND PLACE',
+    })
+  })
+
+  it('places by survival time when nobody is left afloat', () => {
+    const local = { ...racer('you', true), eliminated: true, survivalMs: 50_000 }
+    const maya = { ...racer('maya', false), eliminated: true, survivalMs: 45_000 }
+
+    expect(timeLimitOutcome([maya, local], 60_000, 'The Narrows')).toMatchObject({
+      place: 1,
+      placeLabel: 'FIRST',
+      heading: 'FIRST PLACE',
+    })
+  })
+
+  it('leaves the racers it was given in their original order', () => {
+    const local = { ...racer('you', true), eliminated: true, survivalMs: 30_000 }
+    const maya = { ...racer('maya', false), survivalMs: 60_000 }
+    const racers = [local, maya]
+
+    timeLimitOutcome(racers, 60_000, 'Broken Water')
+
+    expect(racers.map((entry) => entry.id)).toEqual(['you', 'maya'])
   })
 })
