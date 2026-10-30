@@ -21,6 +21,16 @@ describe('guide audio configuration', () => {
     expect(isGuideVoiceId('system-default')).toBe(false)
   })
 
+  it('recognizes the default voice as bundled', () => {
+    expect(isGuideVoiceId(DEFAULT_GUIDE_VOICE_ID)).toBe(true)
+  })
+
+  it('rejects an empty slot, an empty string and a differently cased id', () => {
+    expect(isGuideVoiceId(null), 'nothing saved yet').toBe(false)
+    expect(isGuideVoiceId(''), 'an empty saved value').toBe(false)
+    expect(isGuideVoiceId('AF_BELLA'), 'ids are case-sensitive').toBe(false)
+  })
+
   it('creates a voice- and direction-specific cache key', () => {
     expect(guideAudioKey('am_liam', 'backward', 3)).toBe(
       'guide-am_liam-backward-3',
@@ -34,6 +44,19 @@ describe('the clips a guide voice needs', () => {
 
     expect(clips).toHaveLength(8)
     expect(new Set(clips.map((clip) => clip.key)).size, 'duplicate cache keys').toBe(8)
+  })
+
+  it('lists every forward call before every backward call, one to four strokes', () => {
+    expect(guideVoiceClips('am_eric').map((clip) => clip.key)).toEqual([
+      'guide-am_eric-forward-1',
+      'guide-am_eric-forward-2',
+      'guide-am_eric-forward-3',
+      'guide-am_eric-forward-4',
+      'guide-am_eric-backward-1',
+      'guide-am_eric-backward-2',
+      'guide-am_eric-backward-3',
+      'guide-am_eric-backward-4',
+    ])
   })
 
   it('points each clip at the WAV generated for that voice', () => {
@@ -62,6 +85,18 @@ describe('the put-in screen previews', () => {
     const previews = guideVoicePreviewClips()
 
     expect(previews).toHaveLength(GUIDE_VOICES.length)
+  })
+
+  it('previews every bundled voice in the order the menu lists them', () => {
+    expect(guideVoicePreviewClips().map((clip) => clip.key)).toEqual(
+      GUIDE_VOICES.map((voice) => guideAudioKey(voice.id, 'forward', 4)),
+    )
+  })
+
+  it('fetches each preview from its own voice directory', () => {
+    expect(guideVoicePreviewClip('af_heart').url).toBe(
+      `${import.meta.env.BASE_URL}audio/guide/af_heart/forward-4.wav`,
+    )
   })
 
   it('reuses the run clip, so the chosen voice never fetches it twice', () => {
