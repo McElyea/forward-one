@@ -84,4 +84,67 @@ describe('LevelSelection', () => {
       LEVELS[3],
     ])
   })
+
+  it('matches the selected level by id rather than by object identity', () => {
+    const selection = new LevelSelection<string>(LEVELS)
+    registerEveryLevel(selection, 'first')
+
+    // A copy carrying the same id, as a level rebuilt from saved data would be.
+    selection.select({ ...LEVELS[1] })
+
+    expect(
+      selection.entries().filter((entry) => entry.selected).map((entry) => entry.view),
+    ).toEqual([`first-${LEVELS[1].id}`])
+  })
+
+  it('marks every card registered for the selected level', () => {
+    const selection = new LevelSelection<string>(LEVELS)
+    registerEveryLevel(selection, 'first')
+    registerEveryLevel(selection, 'second')
+
+    selection.select(LEVELS[2])
+
+    expect(
+      selection.entries().filter((entry) => entry.selected).map((entry) => entry.view),
+    ).toEqual([`first-${LEVELS[2].id}`, `second-${LEVELS[2].id}`])
+  })
+
+  it('marks no card when the selected level has none registered', () => {
+    const selection = new LevelSelection<string>(LEVELS)
+    selection.register(LEVELS[0], view('only'))
+
+    selection.select(LEVELS[1])
+
+    expect(selection.selected).toBe(LEVELS[1])
+    expect(selection.entries().map((entry) => entry.selected)).toEqual([false])
+  })
+
+  it('returns entries in registration order, not level order', () => {
+    const selection = new LevelSelection<string>(LEVELS)
+    selection.register(LEVELS[3], view('d'))
+    selection.register(LEVELS[0], view('a'))
+
+    expect(selection.entries().map((entry) => entry.level)).toEqual([LEVELS[3], LEVELS[0]])
+  })
+
+  it('returns fresh entries that do not write back into the selection', () => {
+    const selection = new LevelSelection<string>(LEVELS)
+    selection.register(LEVELS[0], view('a'))
+
+    const [first] = selection.entries()
+    first.selected = false
+    first.level = LEVELS[1]
+
+    expect(selection.entries()).toEqual([{ level: LEVELS[0], view: 'a', selected: true }])
+  })
+
+  it('resets to the first level of the list it was constructed with', () => {
+    const levels = [LEVELS[2], LEVELS[0]]
+    const selection = new LevelSelection<string>(levels)
+
+    selection.select(LEVELS[0])
+    selection.reset()
+
+    expect(selection.selected).toBe(LEVELS[2])
+  })
 })
