@@ -65,6 +65,36 @@ describe('typography', () => {
   it('does not blow up the hero size on a huge display', () => {
     expect(typography(3840, 2160).hero).toBeLessThanOrEqual(68)
   })
+
+  it('stops every size at its ceiling on a huge display', () => {
+    expect(typography(3840, 2160)).toEqual({ hero: 68, title: 36, heading: 24, body: 18, label: 15 })
+  })
+
+  it('holds every size at its floor on a tiny viewport', () => {
+    expect(typography(200, 100)).toEqual({ hero: 30, title: 19, heading: 14, body: 12, label: 11 })
+  })
+
+  it('keys landscape off the height, whatever the width', () => {
+    const expected = { hero: 52, title: 28, heading: 20, body: 15, label: 12 }
+
+    expect(typography(1000, 400)).toEqual(expected)
+    expect(typography(2000, 400)).toEqual(expected)
+  })
+
+  it('keys portrait off the width and scales it up, whatever the height', () => {
+    const expected = { hero: 61, title: 33, heading: 24, body: 17, label: 15 }
+
+    expect(typography(400, 1000)).toEqual(expected)
+    expect(typography(400, 2000)).toEqual(expected)
+  })
+})
+
+describe('descriptionLineSpacing', () => {
+  it('is two fifths of the body size, in whole pixels', () => {
+    expect(descriptionLineSpacing(15)).toBe(6)
+    expect(descriptionLineSpacing(12)).toBe(5)
+    expect(descriptionLineSpacing(18)).toBe(7)
+  })
 })
 
 describe('menuLayout', () => {
@@ -279,6 +309,214 @@ describe('menuLayout', () => {
     expect(menuLayout(393, 852, LEVEL_COUNT, VOICE_COUNT).split).toBe(false)
     expect(menuLayout(852, 393, LEVEL_COUNT, VOICE_COUNT).split).toBe(false)
   })
+
+  it('splits only from 1000 wide and 620 tall, and only in landscape', () => {
+    expect(menuLayout(1000, 620, LEVEL_COUNT, VOICE_COUNT).split).toBe(true)
+    expect(menuLayout(999, 620, LEVEL_COUNT, VOICE_COUNT).split).toBe(false)
+    expect(menuLayout(1000, 619, LEVEL_COUNT, VOICE_COUNT).split).toBe(false)
+    expect(menuLayout(1100, 1200, LEVEL_COUNT, VOICE_COUNT).split).toBe(false)
+  })
+
+  it('gives the setup a panel of its own only when split', () => {
+    const split = menuLayout(1440, 900, LEVEL_COUNT, VOICE_COUNT)
+    const compact = menuLayout(852, 393, LEVEL_COUNT, VOICE_COUNT)
+
+    expect(split.setupPanel).toEqual({ x: 677, y: 34, width: 729, height: 832 })
+    expect(compact.setupPanel).toEqual({ x: 0, y: 0, width: 852, height: 393 })
+  })
+
+  it('gives the hero copy a column only when split', () => {
+    expect(menuLayout(1440, 900, LEVEL_COUNT, VOICE_COUNT).heroBody.width).toBe(609)
+    expect(menuLayout(852, 393, LEVEL_COUNT, VOICE_COUNT).heroBody.width).toBe(0)
+    expect(menuLayout(393, 852, LEVEL_COUNT, VOICE_COUNT).heroBody.width).toBe(0)
+  })
+
+  it('places the subtitle and section label by the three menu shapes', () => {
+    const split = menuLayout(1440, 900, LEVEL_COUNT, VOICE_COUNT)
+    const compactLandscape = menuLayout(852, 393, LEVEL_COUNT, VOICE_COUNT)
+    const portrait = menuLayout(393, 852, LEVEL_COUNT, VOICE_COUNT)
+
+    expect(split.subtitle).toEqual({ x: 34, y: 225 })
+    expect(split.sectionLabel).toEqual({ x: 703, y: 60 })
+    // Beside the title rather than under it: this row has no height to spare.
+    expect(compactLandscape.subtitle).toEqual({ x: 199, y: 22 })
+    expect(compactLandscape.sectionLabel).toEqual({ x: 18, y: 73 })
+    expect(portrait.subtitle).toEqual({ x: 18, y: 73 })
+    expect(portrait.sectionLabel).toEqual({ x: 18, y: 129 })
+  })
+
+  it('bounds the split panel padding between 18 and 28', () => {
+    const narrow = menuLayout(1000, 620, LEVEL_COUNT, VOICE_COUNT)
+    const wide = menuLayout(3000, 1000, LEVEL_COUNT, VOICE_COUNT)
+
+    expect(narrow.sectionLabel.x - narrow.setupPanel.x).toBe(18)
+    expect(wide.sectionLabel.x - wide.setupPanel.x).toBe(28)
+  })
+
+  it('divides the landscape controls row into a mode block and a wider voice panel', () => {
+    const layout = menuLayout(852, 393, LEVEL_COUNT, VOICE_COUNT)
+    const [first, second] = layout.modeButtons
+
+    expect([first.x, first.width, second.x, second.width]).toEqual([18, 173, 200, 173])
+    expect(first.y).toBe(layout.voicePanel.y)
+    expect(second.y).toBe(layout.voicePanel.y)
+    expect([layout.voicePanel.x, layout.voicePanel.width]).toEqual([382, 452])
+    expect(layout.voicePanel.x + layout.voicePanel.width).toBe(
+      layout.startButton.x + layout.startButton.width,
+    )
+  })
+
+  it('runs the portrait controls across the full content width', () => {
+    const layout = menuLayout(393, 852, LEVEL_COUNT, VOICE_COUNT)
+    const [first, second] = layout.modeButtons
+
+    expect([layout.voicePanel.x, layout.voicePanel.width]).toEqual([18, 357])
+    expect([first.x, first.width, second.x, second.width]).toEqual([18, 174, 201, 174])
+    expect(first.y).toBe(second.y)
+  })
+
+  it('divides the voice panel evenly, however many voices there are', () => {
+    const layout = menuLayout(852, 393, LEVEL_COUNT, 3)
+
+    expect(layout.voiceButtons.map((button) => button.x)).toEqual([389, 537, 685])
+    for (const button of layout.voiceButtons) {
+      expect(button.width).toBe(142)
+    }
+  })
+
+  it('never makes more card columns than there are levels in landscape', () => {
+    const layout = menuLayout(852, 393, 2, VOICE_COUNT)
+
+    expect(layout.cardColumns).toBe(2)
+    expect(layout.cards[1].y).toBe(layout.cards[0].y)
+  })
+
+  it('wraps landscape cards onto a new row after the fourth', () => {
+    const layout = menuLayout(852, 393, 6, VOICE_COUNT)
+
+    expect(layout.cards).toHaveLength(6)
+    expect(layout.cardColumns).toBe(4)
+    expect(layout.cards[4].x).toBe(layout.cards[0].x)
+    expect(layout.cards[4].y).toBeGreaterThan(layout.cards[0].y)
+  })
+
+  it('keeps two portrait columns even for an odd level count', () => {
+    const layout = menuLayout(393, 852, 3, VOICE_COUNT)
+
+    expect(layout.cardColumns).toBe(2)
+    expect(layout.cards[2].x).toBe(layout.cards[0].x)
+    expect(layout.cards[2].y).toBeGreaterThan(layout.cards[0].y)
+  })
+
+  it('caps the card height by menu shape', () => {
+    expect(menuLayout(1440, 900, LEVEL_COUNT, VOICE_COUNT).cards[0].height).toBe(172)
+    expect(menuLayout(999, 900, LEVEL_COUNT, VOICE_COUNT).cards[0].height).toBe(112)
+    expect(menuLayout(393, 852, LEVEL_COUNT, VOICE_COUNT).cards[0].height).toBe(124)
+  })
+
+  it('limits a narrow card to its width before any other cap', () => {
+    const [card] = menuLayout(1000, 900, LEVEL_COUNT, VOICE_COUNT).cards
+
+    expect(card.width).toBe(103)
+    expect(card.height).toBe(117)
+  })
+
+  it('holds cards, description and label at their floors when levels overcrowd the menu', () => {
+    const layout = menuLayout(393, 852, 12, VOICE_COUNT)
+
+    expect(layout.cards[0].height).toBe(MIN_TOUCH_PX + 10)
+    expect(layout.detail.height).toBe(layout.type.body * 2)
+    expect(layout.detailLabel).toBe(layout.type.body)
+  })
+
+  it('anchors the how-to-play button in the brand column when split', () => {
+    expect(menuLayout(1440, 900, LEVEL_COUNT, VOICE_COUNT).howToPlayButton).toEqual({
+      x: 34,
+      y: 811,
+      width: 230,
+      height: 55,
+    })
+  })
+
+  it('bounds the split how-to-play button between 180 and 240 wide', () => {
+    expect(menuLayout(1000, 620, LEVEL_COUNT, VOICE_COUNT).howToPlayButton.width).toBe(180)
+    expect(menuLayout(2000, 1000, LEVEL_COUNT, VOICE_COUNT).howToPlayButton.width).toBe(240)
+  })
+
+  it('shrinks how-to-play to an exact touch-floor square at the right gutter when compact', () => {
+    for (const [width, height, x] of [[393, 852, 331], [852, 393, 790]]) {
+      const button = menuLayout(width, height, LEVEL_COUNT, VOICE_COUNT).howToPlayButton
+
+      expect(button.x).toBe(x)
+      expect(button.width).toBe(MIN_TOUCH_PX)
+      expect(button.height).toBe(MIN_TOUCH_PX)
+    }
+  })
+
+  it('caps the how-to-play panel at 720 by 440 and centres it', () => {
+    expect(menuLayout(1440, 900, LEVEL_COUNT, VOICE_COUNT).howToPlayPanel).toEqual({
+      x: 360,
+      y: 230,
+      width: 720,
+      height: 440,
+    })
+  })
+
+  it('fits the how-to-play panel inside the gutters on either short axis', () => {
+    expect(menuLayout(393, 852, LEVEL_COUNT, VOICE_COUNT).howToPlayPanel).toEqual({
+      x: 18,
+      y: 206,
+      width: 357,
+      height: 440,
+    })
+    expect(menuLayout(852, 393, LEVEL_COUNT, VOICE_COUNT).howToPlayPanel).toEqual({
+      x: 66,
+      y: 18,
+      width: 720,
+      height: 357,
+    })
+  })
+
+  it('sizes the how-to-play close button from the mode height, down to 52 tall', () => {
+    expect(menuLayout(1440, 900, LEVEL_COUNT, VOICE_COUNT).howToPlayCloseButton).toEqual({
+      x: 475,
+      y: 580,
+      width: 490,
+      height: 64,
+    })
+    expect(menuLayout(852, 393, LEVEL_COUNT, VOICE_COUNT).howToPlayCloseButton).toEqual({
+      x: 181,
+      y: 305,
+      width: 490,
+      height: 52,
+    })
+  })
+})
+
+describe('levelCardText', () => {
+  it('derives the insets and all three lines from the card', () => {
+    expect(levelCardText({ x: 0, y: 0, width: 200, height: 100 })).toEqual({
+      classLabel: { x: 18, y: 10, size: 11 },
+      number: { x: 17, y: 23, size: 46 },
+      name: { x: 18, y: 77, size: 11 },
+    })
+  })
+
+  it('stops the insets, labels and numeral at their ceilings on a large card', () => {
+    expect(levelCardText({ x: 0, y: 0, width: 400, height: 200 })).toEqual({
+      classLabel: { x: 26, y: 16, size: 15 },
+      number: { x: 25, y: 34, size: 92 },
+      name: { x: 26, y: 166, size: 15 },
+    })
+  })
+
+  it('holds the insets, labels and numeral at their floors on a small card', () => {
+    expect(levelCardText({ x: 0, y: 0, width: 100, height: 48 })).toEqual({
+      classLabel: { x: 12, y: 6, size: 10 },
+      number: { x: 11, y: 18, size: 12 },
+      name: { x: 12, y: 30, size: 10 },
+    })
+  })
 })
 
 describe('riverLayout', () => {
@@ -423,6 +661,155 @@ describe('riverLayout', () => {
     expect(layout.survivalStatus.y).toBeGreaterThanOrEqual(layout.river.y)
     expect(layout.survivalStatus.y).toBeLessThanOrEqual(layout.river.y + layout.river.height)
   })
+
+  it('floats the controls only on a landscape screen under 520 tall', () => {
+    expect(riverLayout(800, 519).controlsOverlay).toBe(true)
+    expect(riverLayout(800, 520).controlsOverlay).toBe(false)
+    expect(riverLayout(400, 500).controlsOverlay).toBe(false)
+  })
+
+  it('bounds the overlay rail between 84 and 150 thick', () => {
+    expect(riverLayout(600, 300).rail.width).toBe(84)
+    expect(riverLayout(852, 393).rail.width).toBe(94)
+    expect(riverLayout(1500, 500).rail.width).toBe(150)
+  })
+
+  it('bounds the stacked landscape rail between 120 and 240 thick', () => {
+    expect(riverLayout(600, 550).rail.width).toBe(120)
+    expect(riverLayout(800, 600).rail.width).toBe(136)
+    expect(riverLayout(1440, 900).rail.width).toBe(240)
+  })
+
+  it('bounds the portrait rail between 40 and 72 thick', () => {
+    expect(riverLayout(300, 600).rail.height).toBe(40)
+    expect(riverLayout(393, 852).rail.height).toBe(47)
+    expect(riverLayout(800, 1400).rail.height).toBe(72)
+  })
+
+  it('runs the stacked landscape rail down the side, level with the river', () => {
+    const { rail, railAxis, river } = riverLayout(1440, 900)
+
+    expect(railAxis).toBe('vertical')
+    expect(rail.x).toBe(river.width)
+    expect(rail.y).toBe(river.y)
+    expect(rail.height).toBe(river.height)
+  })
+
+  it('gives the river the rail\'s band when a portrait run hides the rail', () => {
+    const shown = riverLayout(393, 852)
+    const hidden = riverLayout(393, 852, false)
+
+    expect([shown.river.y, shown.river.height]).toEqual([131, 500])
+    expect(hidden.rail.height).toBe(0)
+    expect([hidden.river.y, hidden.river.height]).toEqual([84, 547])
+  })
+
+  it('gives the river the full width when an overlay run hides the rail', () => {
+    const layout = riverLayout(852, 393, false)
+
+    expect(layout.rail).toEqual({ x: 852, y: 52, width: 0, height: 341 })
+    expect(layout.railAxis).toBe('vertical')
+    expect(layout.river.width).toBe(852)
+    expect(layout.call.x).toBe(426)
+  })
+
+  it('sizes stacked controls by orientation, within 56 to 96 tall', () => {
+    expect(riverLayout(800, 600).controls.forward.height).toBe(84)
+    expect(riverLayout(500, 600).controls.forward.height).toBe(72)
+    expect(riverLayout(300, 400).controls.forward.height).toBe(56)
+    expect(riverLayout(1440, 900).controls.forward.height).toBe(96)
+  })
+
+  it('bounds the overlay controls in both axes', () => {
+    expect(riverLayout(800, 250).controls.forward.height).toBe(56)
+    expect(riverLayout(852, 393).controls.forward.height).toBe(86)
+    expect(riverLayout(1200, 510).controls.forward.height).toBe(110)
+
+    expect(riverLayout(400, 300).controls.forward.width).toBe(68)
+    expect(riverLayout(852, 393).controls.forward.width).toBe(128)
+    expect(riverLayout(1200, 510).controls.forward.width).toBe(150)
+  })
+
+  it('threads the overlay lane between the paddle zones, targeted at the river centre', () => {
+    const layout = riverLayout(852, 393)
+
+    expect(layout.rhythmLane).toEqual({ x: 144, y: 324, width: 470, height: 59 })
+    expect(layout.controls.forward).toEqual({ x: 7, y: 297, width: 128, height: 86 })
+    expect(layout.controls.backward).toEqual({ x: 623, y: 297, width: 128, height: 86 })
+    expect(layout.targetX).toBe(379)
+    expect(layout.gateLabel).toEqual({ x: 379, y: 334 })
+    expect(layout.laneHint).toEqual({ x: 154, y: 376 })
+  })
+
+  it('runs the stacked lane and controls across the gutters', () => {
+    const layout = riverLayout(393, 852)
+
+    expect(layout.rhythmLane).toEqual({ x: 9, y: 640, width: 375, height: 96 })
+    expect(layout.controls.forward).toEqual({ x: 9, y: 745, width: 183, height: 96 })
+    expect(layout.controls.backward).toEqual({ x: 201, y: 745, width: 183, height: 96 })
+  })
+
+  it('draws the raft and call higher on the river in the overlay layout', () => {
+    const overlay = riverLayout(852, 393)
+    const stacked = riverLayout(393, 852)
+
+    expect(overlay.raft).toEqual({ x: 379, y: 195 })
+    expect(overlay.feedback).toEqual({ x: 379, y: 243 })
+    expect(overlay.call).toEqual({ x: 379, y: 103 })
+    expect(overlay.callSub).toEqual({ x: 379, y: 143 })
+
+    expect(stacked.raft).toEqual({ x: 197, y: 406 })
+    expect(stacked.feedback).toEqual({ x: 197, y: 491 })
+    expect(stacked.call).toEqual({ x: 197, y: 211 })
+    expect(stacked.callSub).toEqual({ x: 197, y: 260 })
+  })
+
+  it('holds the overlay top bar at the touch floor plus a margin', () => {
+    expect(riverLayout(852, 393).topBar.height).toBe(52)
+    expect(riverLayout(1200, 510).topBar.height).toBe(52)
+  })
+
+  it('lays out the top bar around the pause button in both layouts', () => {
+    const overlay = riverLayout(852, 393)
+    const stacked = riverLayout(393, 852)
+
+    expect(overlay.pauseButton).toEqual({ x: 790, y: 4, width: 44, height: 44 })
+    expect(overlay.timeText).toEqual({ x: 426, y: 26 })
+    expect(overlay.statsText).toEqual({ x: 780, y: 26 })
+
+    expect(stacked.pauseButton).toEqual({ x: 323, y: 16, width: 52, height: 52 })
+    expect(stacked.timeText).toEqual({ x: 197, y: 42 })
+    expect(stacked.statsText).toEqual({ x: 313, y: 42 })
+  })
+
+  it('holds the stacked pause button at the touch floor on a short top bar', () => {
+    const layout = riverLayout(500, 600)
+
+    expect(layout.pauseButton.width).toBe(MIN_TOUCH_PX)
+    expect(layout.pauseButton.height).toBe(MIN_TOUCH_PX)
+    expect(layout.pauseButton.y).toBe(8)
+    expect(layout.pauseButton.x + layout.pauseButton.width + layout.gutter).toBe(500)
+  })
+
+  it('caps the modal at 620 by 440 and stacks its buttons in the bottom', () => {
+    const layout = riverLayout(1440, 900)
+
+    expect(layout.modalPanel).toEqual({ x: 410, y: 230, width: 620, height: 440 })
+    expect(layout.modalSecondaryButton).toEqual({ x: 497, y: 570, width: 446, height: 66 })
+    expect(layout.modalPrimaryButton).toEqual({ x: 497, y: 488, width: 446, height: 66 })
+  })
+
+  it('fits the modal inside the gutters and holds its buttons at 52 tall on a small phone', () => {
+    const layout = riverLayout(320, 568)
+
+    expect(layout.modalPanel).toEqual({ x: 14, y: 64, width: 292, height: 440 })
+    expect(layout.modalSecondaryButton).toEqual({ x: 55, y: 438, width: 210, height: 52 })
+    expect(layout.modalPrimaryButton).toEqual({ x: 55, y: 378, width: 210, height: 52 })
+  })
+
+  it('shrinks the modal to the gutters on a short landscape screen', () => {
+    expect(riverLayout(667, 375).modalPanel).toEqual({ x: 24, y: 17, width: 620, height: 341 })
+  })
 })
 
 describe('lobbyLayout', () => {
@@ -465,11 +852,91 @@ describe('lobbyLayout', () => {
     expect(layout.createButton.y).toBeGreaterThan(layout.nameInput.y + layout.nameInput.height)
     expect(layout.codeInput.y).toBeGreaterThan(layout.createButton.y + layout.createButton.height)
   })
+
+  it('puts the portrait setup controls on one column, with join beside the code', () => {
+    const layout = lobbyLayout(393, 852)
+
+    expect(layout.content).toEqual({ x: 18, y: 89, width: 357, height: 745 })
+    expect(layout.nameInput).toEqual({ x: 18, y: 120, width: 357, height: 58 })
+    expect(layout.quickMatchButton).toEqual({ x: 18, y: 188, width: 357, height: 58 })
+    expect(layout.capacityButtons.map((button) => button.x)).toEqual([18, 110, 202, 293])
+    for (const button of layout.capacityButtons) {
+      expect(button.y).toBe(282)
+      expect(button.width).toBe(82)
+      expect(button.height).toBe(MIN_TOUCH_PX)
+    }
+    expect(layout.createButton).toEqual({ x: 18, y: 336, width: 357, height: 58 })
+    expect(layout.codeInput).toEqual({ x: 18, y: 430, width: 218, height: 58 })
+    expect(layout.joinButton).toEqual({ x: 246, y: 430, width: 129, height: 58 })
+    expect(layout.backButton).toEqual({ x: 18, y: 498, width: 357, height: MIN_TOUCH_PX })
+  })
+
+  it('bounds the portrait join button between 96 and 180 wide', () => {
+    expect(lobbyLayout(240, 568).joinButton.width).toBe(96)
+    expect(lobbyLayout(834, 1112).joinButton.width).toBe(180)
+  })
+
+  it('stacks the back button under join in the landscape column', () => {
+    expect(lobbyLayout(667, 375).backButton).toEqual({
+      x: 341,
+      y: 207,
+      width: 310,
+      height: MIN_TOUCH_PX,
+    })
+  })
+
+  it('keeps the landscape capacity row inside the left column', () => {
+    const layout = lobbyLayout(667, 375)
+    const last = layout.capacityButtons[3]
+
+    expect(last.x + last.width).toBeLessThanOrEqual(layout.nameInput.x + layout.nameInput.width)
+    expect(last.x + last.width).toBeLessThan(layout.codeInput.x)
+  })
+
+  it('puts the room buttons in a two-by-two block at the foot of the content', () => {
+    const { roomButtons } = lobbyLayout(393, 852)
+
+    expect(roomButtons).toEqual([
+      { x: 18, y: 708, width: 174, height: 58 },
+      { x: 202, y: 708, width: 174, height: 58 },
+      { x: 18, y: 776, width: 174, height: 58 },
+      { x: 202, y: 776, width: 174, height: 58 },
+    ])
+  })
+
+  it('stretches leave-queue across the bottom room-button row', () => {
+    expect(lobbyLayout(393, 852).queueLeaveButton).toEqual({
+      x: 18,
+      y: 776,
+      width: 357,
+      height: 58,
+    })
+  })
+
+  it('fills the room between the title and the room buttons with the member list', () => {
+    expect(lobbyLayout(393, 852).members).toEqual({ x: 18, y: 142, width: 357, height: 556 })
+  })
+
+  it('keeps three lines of member list on a very short viewport', () => {
+    const layout = lobbyLayout(500, 200)
+
+    expect(layout.members.height).toBe(layout.type.body * 3)
+  })
 })
 
 describe('gutter', () => {
   it('stays proportional but bounded', () => {
     expect(gutter(320, 568)).toBeGreaterThanOrEqual(12)
     expect(gutter(3840, 2160)).toBeLessThanOrEqual(34)
+  })
+
+  it('stops at exactly 12 and 34', () => {
+    expect(gutter(200, 400)).toBe(12)
+    expect(gutter(3840, 2160)).toBe(34)
+  })
+
+  it('keys off the shorter side, in either orientation', () => {
+    expect(gutter(400, 1000)).toBe(18)
+    expect(gutter(1000, 400)).toBe(18)
   })
 })
