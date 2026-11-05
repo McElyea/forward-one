@@ -1,17 +1,19 @@
 import {
-  describeThrown,
-  errorEvent,
   shouldReportUsage,
+  unhandledRejectionEvent,
+  uncaughtErrorEvent,
   USAGE_EVENTS_PATH,
   RETURNING_VISITOR_KEY,
+  type PageContext,
   type UsageEvent,
 } from './usageEvents'
 
 /**
  * The browser half of usage reporting: decides once per page whether this
  * page reports, and delivers events without ever making the game wait on the
- * answer. Nothing in here is covered by the suite (it reads `window`), which is
- * why every decision it makes is delegated to `usageEvents.ts`.
+ * answer. Storage and the delivery calls are taken as arguments so the suite
+ * can reach them; what is left reads `window` itself, which is why every
+ * decision made there is delegated to `usageEvents.ts`.
  */
 
 let reportingEnabled: boolean | undefined
@@ -29,6 +31,23 @@ function enabled(): boolean {
   return reportingEnabled
 }
 
+/** The ways out of the browser, each absent where the browser lacks it. */
+export interface UsageDelivery {
+  fetch?: (url: string, init: RequestInit) => Promise<unknown>
+  sendBeacon?: (url: string, data: Blob) => boolean
+}
+
+/** Wrapped, not passed bare: both throw if called detached from their owner. */
+function browserDelivery(): UsageDelivery {
+  return {
+    fetch: typeof fetch === 'function' ? (url, init) => fetch(url, init) : undefined,
+    sendBeacon:
+      typeof navigator.sendBeacon === 'function'
+        ? (url, data) => navigator.sendBeacon(url, data)
+        : undefined,
+  }
+}
+
 /**
  * Fire and forget. `fetch` with `keepalive` survives the tab closing mid-run,
  * which is exactly when an abandoned-run event is sent, and a failure is the
@@ -41,24 +60,43 @@ function enabled(): boolean {
  * Chrome played a full session and nothing arrived. The beacon is kept only
  * for a browser with no `fetch` at all.
  */
-export function sendUsageEvent(event: UsageEvent): void {
-  if (!enabled()) return
+export function deliverUsageEvent(
+  event: UsageEvent,
+  delivery: UsageDelivery = browserDelivery(),
+): void {
   const body = JSON.stringify(event)
   try {
-    if (typeof fetch === 'function') {
-      void fetch(USAGE_EVENTS_PATH, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-        keepalive: true,
-      }).catch(() => undefined)
+    if (delivery.fetch) {
+      void delivery
+        .fetch(USAGE_EVENTS_PATH, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+          keepalive: true,
+        })
+        .catch(() => undefined)
       return
     }
-    if (typeof navigator.sendBeacon === 'function') {
-      navigator.sendBeacon(USAGE_EVENTS_PATH, new Blob([body], { type: 'application/json' }))
-    }
+    delivery.sendBeacon?.(USAGE_EVENTS_PATH, new Blob([body], { type: 'application/json' }))
   } catch {
     // Reporting must never be the thing that throws.
+  }
+}
+
+export function sendUsageEvent(event: UsageEvent): void {
+  if (!enabled()) return
+  deliverUsageEvent(event)
+}
+
+/** The half of `Storage` the returning-visitor flag needs. */
+export type VisitStorage = Pick<Storage, 'getItem' | 'setItem'>
+
+/** The browser's storage, or null where merely reaching for it throws. */
+function browserStorage(): VisitStorage | null {
+  try {
+    return window.localStorage
+  } catch {
+    return null
   }
 }
 
@@ -67,15 +105,21 @@ export function sendUsageEvent(event: UsageEvent): void {
  * way out so the next visit reads as returning. localStorage may be absent or
  * refused (private windows, storage quotas); either reads as a first visit.
  */
-export function markVisited(): boolean {
+export function markVisited(storage: VisitStorage | null = browserStorage()): boolean {
+  if (storage === null) return false
   try {
-    const seen = window.localStorage.getItem(RETURNING_VISITOR_KEY) !== null
-    if (!seen) window.localStorage.setItem(RETURNING_VISITOR_KEY, '1')
+    const seen = storage.getItem(RETURNING_VISITOR_KEY) !== null
+    if (!seen) storage.setItem(RETURNING_VISITOR_KEY, '1')
     return seen
   } catch {
     return false
   }
 }
+
+const pageContext = (): PageContext => ({
+  userAgent: navigator.userAgent,
+  url: window.location.href,
+})
 
 /**
  * Report uncaught errors and unhandled rejections. Installed once at boot,
@@ -85,27 +129,9 @@ export function markVisited(): boolean {
 export function installErrorReporting(): void {
   if (!enabled()) return
   window.addEventListener('error', (event) => {
-    const described = describeThrown(event.error ?? event.message)
-    sendUsageEvent(
-      errorEvent({
-        message: described.message,
-        source: event.filename ? `${event.filename}:${event.lineno}:${event.colno}` : '',
-        stack: described.stack,
-        userAgent: navigator.userAgent,
-        url: window.location.href,
-      }),
-    )
+    sendUsageEvent(uncaughtErrorEvent(event, pageContext()))
   })
   window.addEventListener('unhandledrejection', (event) => {
-    const described = describeThrown(event.reason)
-    sendUsageEvent(
-      errorEvent({
-        message: `Unhandled rejection — ${described.message}`,
-        source: '',
-        stack: described.stack,
-        userAgent: navigator.userAgent,
-        url: window.location.href,
-      }),
-    )
+    sendUsageEvent(unhandledRejectionEvent(event.reason, pageContext()))
   })
 }
