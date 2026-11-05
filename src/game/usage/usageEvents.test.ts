@@ -8,6 +8,8 @@ import {
   runEndedEvent,
   runStartedEvent,
   shouldReportUsage,
+  uncaughtErrorEvent,
+  unhandledRejectionEvent,
   visitEvent,
 } from './usageEvents'
 
@@ -250,5 +252,76 @@ describe('errorEvent / describeThrown', () => {
     expect(describeThrown({ message: 'object-ish' })).toEqual({ message: 'object-ish', stack: '' })
     expect(describeThrown(42)).toEqual({ message: 'Non-error thrown: 42', stack: '' })
     expect(describeThrown(undefined).message).toContain('undefined')
+  })
+})
+
+describe('uncaughtErrorEvent', () => {
+  const page = { userAgent: 'Firefox', url: 'https://fwdone.com/' }
+  const uncaught = { error: null, message: '', filename: '', lineno: 0, colno: 0 }
+
+  it('reports what was thrown and where', () => {
+    const error = new TypeError('bad')
+    error.stack = 'at main.js:12:7'
+
+    expect(
+      uncaughtErrorEvent({ error, message: 'Uncaught TypeError: bad', filename: 'main.js', lineno: 12, colno: 7 }, page),
+    ).toEqual({
+      type: 'error',
+      message: 'TypeError: bad',
+      source: 'main.js:12:7',
+      stack: 'at main.js:12:7',
+      userAgent: 'Firefox',
+      url: 'https://fwdone.com/',
+    })
+  })
+
+  it('falls back to the event\'s message where nothing was handed over', () => {
+    expect(uncaughtErrorEvent({ ...uncaught, message: 'Script error.' }, page).message, 'null error')
+      .toBe('Script error.')
+    expect(
+      uncaughtErrorEvent({ ...uncaught, error: undefined, message: 'Script error.' }, page).message,
+      'undefined error',
+    ).toBe('Script error.')
+  })
+
+  it('reports a falsy throw as itself rather than the event\'s message', () => {
+    expect(uncaughtErrorEvent({ ...uncaught, error: 0, message: 'Uncaught 0' }, page).message)
+      .toBe('Non-error thrown: 0')
+  })
+
+  it('reports no source where the browser names no file', () => {
+    expect(uncaughtErrorEvent({ ...uncaught, lineno: 12, colno: 7 }, page).source).toBe('')
+  })
+
+  it('bounds the report like any other error', () => {
+    const event = uncaughtErrorEvent({ ...uncaught, message: '', filename: 'f'.repeat(300) }, page)
+
+    expect(event.message, 'an empty message').toBe('Unknown error')
+    expect(event.source, 'a long file name').toHaveLength(200)
+  })
+})
+
+describe('unhandledRejectionEvent', () => {
+  const page = { userAgent: 'Firefox', url: 'https://fwdone.com/' }
+
+  it('marks the report as a rejection and carries the page', () => {
+    const reason = new Error('offline')
+    reason.stack = 'at fetch'
+
+    expect(unhandledRejectionEvent(reason, page)).toEqual({
+      type: 'error',
+      message: 'Unhandled rejection — Error: offline',
+      source: '',
+      stack: 'at fetch',
+      userAgent: 'Firefox',
+      url: 'https://fwdone.com/',
+    })
+  })
+
+  it('describes a rejection reason of any shape', () => {
+    expect(unhandledRejectionEvent('timed out', page).message)
+      .toBe('Unhandled rejection — timed out')
+    expect(unhandledRejectionEvent(undefined, page).message)
+      .toBe('Unhandled rejection — Non-error thrown: undefined')
   })
 })

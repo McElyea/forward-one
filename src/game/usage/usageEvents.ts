@@ -227,3 +227,43 @@ export function describeThrown(thrown: unknown): { message: string; stack: strin
   }
   return { message: `Non-error thrown: ${String(thrown)}`, stack: '' }
 }
+
+/** The page an error happened on, as an error report records it. */
+export interface PageContext {
+  userAgent: string
+  url: string
+}
+
+/** The fields of a window `error` event a report is built from. */
+export interface UncaughtError {
+  error: unknown
+  message: string
+  filename: string
+  lineno: number
+  colno: number
+}
+
+/**
+ * A cross-origin script reaches the handler with a null `error` and only a
+ * message, so the message stands in for it. `??`, not `||`: a script can throw
+ * `0` or `''`, and that is still what it threw.
+ */
+export function uncaughtErrorEvent(uncaught: UncaughtError, page: PageContext): ErrorEvent {
+  const described = describeThrown(uncaught.error ?? uncaught.message)
+  return errorEvent({
+    message: described.message,
+    source: uncaught.filename ? `${uncaught.filename}:${uncaught.lineno}:${uncaught.colno}` : '',
+    stack: described.stack,
+    ...page,
+  })
+}
+
+export function unhandledRejectionEvent(reason: unknown, page: PageContext): ErrorEvent {
+  const described = describeThrown(reason)
+  return errorEvent({
+    message: `Unhandled rejection — ${described.message}`,
+    source: '',
+    stack: described.stack,
+    ...page,
+  })
+}
