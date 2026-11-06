@@ -58,6 +58,16 @@ describe('LEVELS', () => {
     }
   })
 
+  it('calls only stroke counts the guide has a clip for', () => {
+    // RiverScene.speakCall() returns without a sound outside one to four, so a
+    // fifth stroke would compile, run and leave that cue with no spoken call.
+    for (const level of LEVELS) {
+      for (const cue of level.cues) {
+        expect([1, 2, 3, 4], `${level.id} cue at ${cue.at}`).toContain(cue.strokes)
+      }
+    }
+  })
+
   it('gives every level a six-digit hex accent', () => {
     for (const level of LEVELS) {
       expect(level.accent).toMatch(/^#[0-9a-f]{6}$/)
