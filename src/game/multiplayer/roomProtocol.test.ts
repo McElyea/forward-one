@@ -77,6 +77,12 @@ describe('parseRaceRoom', () => {
     }).startsAtUnixMs).toBeUndefined()
   })
 
+  it('passes through every state a room moves through', () => {
+    for (const state of ['lobby', 'countdown', 'racing', 'finished']) {
+      expect(parseRaceRoom(payload({ state })).state, state).toBe(state)
+    }
+  })
+
   it('rejects malformed server data at the transport boundary', () => {
     expect(() => parseRaceRoom({ state: 'lobby' })).toThrow('Room response')
     expect(() => parseRaceRoom({

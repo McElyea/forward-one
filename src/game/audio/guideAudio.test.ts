@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import voiceGenerator from '../../../scripts/generate-guide-voice.mjs?raw'
 import {
   DEFAULT_GUIDE_VOICE_ID,
   GUIDE_VOICES,
@@ -105,6 +106,36 @@ describe('the put-in screen previews', () => {
 
     expect(runKeys, 'the preview must share a cache key with the run set').toContain(
       preview.key,
+    )
+  })
+})
+
+describe('the clips that ship', () => {
+  // Not imported: only the paths are read, and the glob's keys need no loader.
+  const shippedWavs = Object.keys(import.meta.glob('../../../public/audio/guide/**/*.wav'))
+
+  it('ships exactly the WAVs the bundled voices ask for', () => {
+    // RiverScene.speakCall() stays silent on a clip that never loaded, so a
+    // missing file costs that call its voice without failing anything else.
+    const shipped = shippedWavs
+      .map((path) => path.replace('../../../public/', import.meta.env.BASE_URL))
+      .sort()
+    const requested = GUIDE_VOICES
+      .flatMap((voice) => guideVoiceClips(voice.id))
+      .map((clip) => clip.url)
+      .sort()
+
+    expect(shipped).toEqual(requested)
+  })
+
+  it('regenerates every bundled voice by default', () => {
+    const defaults = /const DEFAULT_VOICES = \[(.*)\]/.exec(voiceGenerator)
+    if (defaults === null) {
+      throw new Error('DEFAULT_VOICES could not be read — the format it is parsed from has changed')
+    }
+
+    expect([...defaults[1].matchAll(/'(\w+)'/g)].map((voice) => voice[1])).toEqual(
+      GUIDE_VOICES.map((voice) => voice.id),
     )
   })
 })
