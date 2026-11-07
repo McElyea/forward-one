@@ -6,6 +6,16 @@ import nginxConfig from '../docker/nginx.conf?raw'
 import manifestSource from '../package.json?raw'
 import readme from '../README.md?raw'
 import tsconfigSource from '../tsconfig.json?raw'
+import { MIN_RACE_PADDLERS } from './game/multiplayer/lobbyState'
+import {
+  DEFAULT_ROOM_CAPACITY,
+  isRoomCode,
+  MAX_ROOM_CAPACITY,
+  MIN_ROOM_CAPACITY,
+  sanitizePlayerName,
+} from './game/multiplayer/roomPolicy'
+import { parseRaceRoom } from './game/multiplayer/roomProtocol'
+import { RACER_COLORS } from './game/ui/theme'
 
 /**
  * `README.md`, `AGENTS.md`, `package.json`, `ci.yml`, the `Dockerfile` and the
@@ -581,5 +591,277 @@ describe('the multiplayer schema stays in step with the levels that ship', () =>
         `${list.path} accepts [${list.ids.join(', ')}] but levels.ts ships [${shippedIds.join(', ')}]`,
       ).toEqual(shippedIds)
     }
+  })
+})
+
+/**
+ * Every capture group of `pattern` (which must be global) across the migrations,
+ * oldest file first, so that the last entry is the definition a replayed schema
+ * ends up with.
+ */
+const schemaCaptures = (label: string, pattern: RegExp): string[][] => {
+  const found = Object.keys(migrationText)
+    .sort()
+    .flatMap((path) => [...migrationText[path].matchAll(pattern)].map((match) => match.slice(1)))
+  if (found.length === 0) {
+    throw new Error(`${label} could not be read from supabase/migrations — the format has changed`)
+  }
+  return found
+}
+
+/** The first capture of the newest place `pattern` matches, for a redefined object. */
+const latestCapture = (label: string, pattern: RegExp): string => {
+  const found = schemaCaptures(label, pattern)
+  return found[found.length - 1][0]
+}
+
+/**
+ * The same rule the level ids obey holds for everything else a room is made of:
+ * the browser and the database each enforce their half, and neither build reads
+ * the other. A client that disagrees with the schema compiles, passes its own
+ * unit tests, plays solo, and fails only on a live project — where the player
+ * sees a Postgres exception, or a room code no invite can reach.
+ */
+describe('the multiplayer schema stays in step with the rules the client applies', () => {
+  const allocatedMember = { playerId: 'host-id', name: 'HOST', colorIndex: 0 }
+  const allocatedRoom = {
+    id: 'room-id',
+    code: 'RAFT23',
+    levelId: 'class-ii',
+    maxPlayers: DEFAULT_ROOM_CAPACITY,
+    hostPlayerId: 'host-id',
+    matchmaking: false,
+    state: 'lobby',
+    serverNow: '2026-08-19T11:59:57.000Z',
+    startsAt: null,
+    members: [allocatedMember],
+  }
+
+  it('bounds room capacity where validateRoomCapacity does', () => {
+    const bounds = schemaCaptures(
+      'the room capacity bounds',
+      /max_players (?:not )?between (\d+) and (\d+)/g,
+    )
+
+    for (const bound of bounds) {
+      expect(
+        bound,
+        `the schema bounds capacity at ${bound.join('-')}, the client at ` +
+          `${MIN_ROOM_CAPACITY}-${MAX_ROOM_CAPACITY}`,
+      ).toEqual([String(MIN_ROOM_CAPACITY), String(MAX_ROOM_CAPACITY)])
+    }
+  })
+
+  it('defaults room capacity to DEFAULT_ROOM_CAPACITY', () => {
+    const defaults = schemaCaptures(
+      'the room capacity default',
+      /max_players smallint (?:not null )?default (\d+)/g,
+    )
+
+    for (const [capacity] of defaults) {
+      expect(capacity, 'the schema and roomPolicy.ts default a room to different sizes').toBe(
+        String(DEFAULT_ROOM_CAPACITY),
+      )
+    }
+  })
+
+  it('needs the number of paddlers canStartRace needs', () => {
+    // The host's start check, and the count that opens a quick-match countdown.
+    const minimums = schemaCaptures(
+      'the minimum paddler count',
+      /member_count (?:<|>=) (\d+)/g,
+    )
+
+    for (const [paddlers] of minimums) {
+      expect(paddlers, 'the schema and lobbyState.ts need different numbers of paddlers').toBe(
+        String(MIN_RACE_PADDLERS),
+      )
+    }
+  })
+
+  it('stores paddler names of the length sanitizePlayerName produces', () => {
+    const longest = sanitizePlayerName('x'.repeat(100)).length
+    const limits = schemaCaptures(
+      'the paddler name length',
+      /player_name\)+ (?:not )?between (\d+) and (\d+)/g,
+    )
+
+    for (const limit of limits) {
+      expect(
+        limit,
+        `the schema takes names of ${limit.join('-')} characters, the client cuts them at ${longest}`,
+      ).toEqual(['1', String(longest)])
+    }
+  })
+
+  it('checks room codes against the pattern the client validates with', () => {
+    const client = soleMatch(
+      'ROOM_CODE in roomPolicy.ts',
+      /const ROOM_CODE = \/(.+)\/$/m,
+      sourceText['src/game/multiplayer/roomPolicy.ts'],
+    )
+
+    expect(latestCapture('the room code constraint', /\(code ~ '([^']+)'\)/g)).toBe(client)
+  })
+
+  it('generates exactly the room codes the client accepts', () => {
+    const alphabet = latestCapture(
+      'the room code alphabet',
+      /alphabet constant text := '(\w+)'/g,
+    )
+    const length = Number(
+      latestCapture('the room code length', /for position in 1\.\.(\d+) loop/g),
+    )
+
+    const accepted = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789']
+      .filter((character) => isRoomCode(character.repeat(length)))
+
+    expect(
+      accepted.sort(),
+      'new_race_room_code() and isRoomCode() disagree about what a room code is',
+    ).toEqual([...alphabet].sort())
+  })
+
+  it('hands out one colour index for each racer colour', () => {
+    const [firstColor, lastColor] = schemaCaptures(
+      'the color_index constraint',
+      /color_index between (\d+) and (\d+)/g,
+    )[0]
+
+    expect(
+      [firstColor, lastColor],
+      'the schema allows a colour index RACER_COLORS has no entry for, or wastes one',
+    ).toEqual(['0', String(RACER_COLORS.length - 1)])
+
+    for (const [wrap] of schemaCaptures('the colour index wrap', /member_count % (\d+)/g)) {
+      expect(wrap, 'room colours wrap at a size other than RACER_COLORS').toBe(
+        String(RACER_COLORS.length),
+      )
+    }
+  })
+
+  it('stores only room states parseRaceRoom accepts', () => {
+    const states = [
+      ...latestCapture(
+        'the room state constraint',
+        /default 'lobby' check \(state in \(([^)]*)\)\)/g,
+      ).matchAll(/'([^']+)'/g),
+    ].map((state) => state[1])
+
+    expect(states.length, 'no room state could be read from the constraint').toBeGreaterThan(0)
+    for (const state of states) {
+      expect(
+        () => parseRaceRoom({ ...allocatedRoom, state }),
+        `the schema allows a room state of ${state}, which every client refuses`,
+      ).not.toThrow()
+    }
+  })
+
+  // Only the newest definition counts: the first migration's payload predates
+  // `matchmaking`, which is exactly the shape of the drift this is here to catch.
+  // The parse is what ties this to `parseRaceRoom` — a field it starts to require
+  // has to join the object above, and then this comparison, before going green.
+  it('answers with the fields parseRaceRoom reads', () => {
+    const payload = latestCapture(
+      'the race_room_payload definition',
+      /function public\.race_room_payload\(p_room_id uuid\)[\s\S]*?\$\$([\s\S]*?)\$\$/g,
+    )
+    const answered = [...payload.matchAll(/'(\w+)', /g)].map((field) => field[1]).sort()
+
+    expect(() => parseRaceRoom(allocatedRoom)).not.toThrow()
+    expect(answered, 'race_room_payload and parseRaceRoom describe different rooms').toEqual(
+      [...Object.keys(allocatedRoom), ...Object.keys(allocatedMember)].sort(),
+    )
+  })
+
+  it('leaves a paddler a missed heartbeat before giving their place away', () => {
+    const heartbeatMs = Number(
+      soleMatch(
+        'ROOM_HEARTBEAT_MS',
+        /const ROOM_HEARTBEAT_MS = ([\d_]+)/,
+        sourceText['src/game/multiplayer/SupabaseRoomConnection.ts'],
+      ).replaceAll('_', ''),
+    )
+    const staleAfterSeconds = schemaCaptures(
+      'the stale paddler windows',
+      /_seen_at < now\(\) - interval '(\d+) seconds'/g,
+    ).map(([seconds]) => Number(seconds))
+
+    expect(
+      heartbeatMs * 2,
+      'one lost heartbeat is enough for the schema to evict a paddler or replace a host',
+    ).toBeLessThanOrEqual(Math.min(...staleAfterSeconds) * 1_000)
+  })
+})
+
+/**
+ * `supabase-js` takes a function name and its arguments as plain strings and a
+ * plain object, so a misspelling is checked by nothing until PostgREST answers
+ * that no such function exists. Each call the client makes is read back here and
+ * held to the signature the migrations leave behind.
+ */
+describe('every RPC the client calls is one the schema offers', () => {
+  const rpcCalls = Object.entries(sourceText)
+    .filter(([path]) => !path.endsWith('.test.ts'))
+    .flatMap(([path, text]) =>
+      [...text.matchAll(/\.rpc\('(\w+)'(?:, \{([^}]*)\})?/g)].map((call) => ({
+        path,
+        name: call[1],
+        args: [...(call[2] ?? '').matchAll(/(\w+):/g)].map((arg) => arg[1]),
+      })),
+    )
+
+  it('can still find the calls', () => {
+    expect(rpcCalls.length, 'no .rpc() call could be read — the format has changed').toBeGreaterThan(0)
+  })
+
+  it('calls functions that exist, with the arguments they take', () => {
+    // A later `create or replace` overwrites the entry, as it does in the database.
+    const functions = new Map(
+      schemaCaptures(
+        'the schema functions',
+        /create (?:or replace )?function public\.(\w+)\(([^)]*)\)/g,
+      ).map(([name, parameters]) => [
+        name,
+        parameters
+          .split(',')
+          .map((parameter) => parameter.trim())
+          .filter((parameter) => parameter !== '')
+          .map((parameter) => ({
+            name: parameter.split(/\s+/)[0],
+            optional: /\sdefault\s/.test(parameter),
+          })),
+      ]),
+    )
+
+    for (const call of rpcCalls) {
+      const declared = functions.get(call.name)
+      if (declared === undefined) {
+        throw new Error(`${call.path} calls ${call.name}, which no migration defines`)
+      }
+
+      const unknown = call.args.filter(
+        (arg) => !declared.some((parameter) => parameter.name === arg),
+      )
+      const omitted = declared
+        .filter((parameter) => !parameter.optional && !call.args.includes(parameter.name))
+        .map((parameter) => parameter.name)
+
+      expect(unknown, `${call.name} does not take these arguments: ${unknown.join(', ')}`).toEqual([])
+      expect(omitted, `${call.name} needs these arguments too: ${omitted.join(', ')}`).toEqual([])
+    }
+  })
+
+  // The migrations revoke each function from `public`, so one that is never granted
+  // back exists, matches its call, and refuses every signed-in paddler.
+  it('calls only functions granted to signed-in paddlers', () => {
+    const granted = schemaCaptures(
+      'the function grants',
+      /grant execute on function public\.(\w+)\([^)]*\) to authenticated/g,
+    ).map(([name]) => name)
+
+    const refused = rpcCalls.map((call) => call.name).filter((name) => !granted.includes(name))
+
+    expect(refused, `RPCs the client calls without a grant: ${refused.join(', ')}`).toEqual([])
   })
 })
