@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import agentsGuide from '../AGENTS.md?raw'
 import ciWorkflow from '../.github/workflows/ci.yml?raw'
 import dockerfile from '../Dockerfile?raw'
+import envExample from '../.env.example?raw'
 import nginxConfig from '../docker/nginx.conf?raw'
 import manifestSource from '../package.json?raw'
 import readme from '../README.md?raw'
@@ -18,10 +19,11 @@ import { parseRaceRoom } from './game/multiplayer/roomProtocol'
 import { RACER_COLORS } from './game/ui/theme'
 
 /**
- * `README.md`, `AGENTS.md`, `package.json`, `ci.yml`, the `Dockerfile` and the
- * nginx config describe the same project to different audiences, and nothing
- * else in the suite reads any of them. Three disagreements between them had to
- * be corrected by hand once already; these assertions turn the next one into a
+ * `README.md`, `AGENTS.md`, `package.json`, `ci.yml`, `.env.example`, the
+ * `Dockerfile` and the nginx config describe the same project to different
+ * audiences, and nothing else in the suite reads any of them. Three
+ * disagreements between them had to be corrected by hand once already; these
+ * assertions turn the next one into a
  * test failure rather than into a contributor running a command that no longer
  * exists — or trusting a rule the code stopped enforcing.
  *
@@ -447,6 +449,61 @@ describe('the container image stays in step with the project it builds', () => {
       image,
       `the Dockerfile builds on Node ${image} but package.json declares engines.node ">=${declared}"`,
     ).toBe(declared)
+  })
+})
+
+/**
+ * A `VITE_*` value is named in five places: the source that reads it, the
+ * `.env.example` a developer copies, the Dockerfile's `ARG` and `ENV` lines that
+ * carry it into `npm run build`, and the README's `docker build` example. Vite
+ * substitutes an unset key with `undefined` and says nothing, so a key renamed in
+ * one of them builds cleanly and ships a bundle that quietly falls back to the
+ * simulated race. Each list is read back here and held to the keys the code reads.
+ */
+describe('every build-time variable the code reads is one the setup supplies', () => {
+  const sorted = (keys: Iterable<string>): string[] => [...new Set(keys)].sort()
+
+  const readKeys = sorted(
+    Object.entries(sourceText)
+      .filter(([path]) => !path.endsWith('.test.ts'))
+      .flatMap(([, text]) =>
+        [...text.matchAll(/import\.meta\.env\.(VITE_\w+)/g)].map((read) => read[1]),
+      ),
+  )
+
+  it('can still find the keys the code reads', () => {
+    expect(readKeys.length, 'no import.meta.env.VITE_* read could be found — the format has changed').toBeGreaterThan(0)
+  })
+
+  it('lists every key in .env.example, and no other', () => {
+    const listed = sorted([...envExample.matchAll(/^(VITE_\w+)=/gm)].map((line) => line[1]))
+
+    expect(listed, '.env.example and the keys src/ reads have drifted apart').toEqual(readKeys)
+  })
+
+  it('declares a build argument for every key, and no other', () => {
+    const declared = sorted([...dockerfile.matchAll(/^ARG (VITE_\w+)=/gm)].map((line) => line[1]))
+
+    expect(declared, 'the Dockerfile ARG lines and the keys src/ reads have drifted apart').toEqual(readKeys)
+  })
+
+  it('hands each build argument to the build under its own name', () => {
+    const exported = [...dockerfile.matchAll(/(VITE_\w+)=\$(\w+)/g)]
+    const renamed = exported
+      .filter(([, key, argument]) => key !== argument)
+      .map(([, key, argument]) => `${key}=$${argument}`)
+
+    expect(renamed, `ENV lines that read a different argument: ${renamed.join(', ')}`).toEqual([])
+    expect(
+      sorted(exported.map(([, key]) => key)),
+      'the Dockerfile ENV lines and the keys src/ reads have drifted apart',
+    ).toEqual(readKeys)
+  })
+
+  it('shows every key in the README docker build example, and no other', () => {
+    const shown = sorted([...readme.matchAll(/--build-arg (VITE_\w+)=/g)].map((flag) => flag[1]))
+
+    expect(shown, 'the README --build-arg flags and the keys src/ reads have drifted apart').toEqual(readKeys)
   })
 })
 
