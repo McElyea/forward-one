@@ -19,10 +19,11 @@ import { parseRaceRoom } from './game/multiplayer/roomProtocol'
 import { RACER_COLORS } from './game/ui/theme'
 
 /**
- * `README.md`, `AGENTS.md`, `package.json`, `ci.yml`, the `Dockerfile` and the
- * nginx config describe the same project to different audiences, and nothing
- * else in the suite reads any of them. Three disagreements between them had to
- * be corrected by hand once already; these assertions turn the next one into a
+ * `README.md`, `AGENTS.md`, `package.json`, `ci.yml`, `.env.example`, the
+ * `Dockerfile` and the nginx config describe the same project to different
+ * audiences, and nothing else in the suite reads any of them. Three
+ * disagreements between them had to be corrected by hand once already; these
+ * assertions turn the next one into a
  * test failure rather than into a contributor running a command that no longer
  * exists — or trusting a rule the code stopped enforcing.
  *
