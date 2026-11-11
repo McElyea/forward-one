@@ -3,6 +3,7 @@ import agentsGuide from '../AGENTS.md?raw'
 import ciWorkflow from '../.github/workflows/ci.yml?raw'
 import dockerfile from '../Dockerfile?raw'
 import envExample from '../.env.example?raw'
+import pageShell from '../index.html?raw'
 import nginxConfig from '../docker/nginx.conf?raw'
 import manifestSource from '../package.json?raw'
 import readme from '../README.md?raw'
@@ -16,11 +17,11 @@ import {
   sanitizePlayerName,
 } from './game/multiplayer/roomPolicy'
 import { parseRaceRoom } from './game/multiplayer/roomProtocol'
-import { RACER_COLORS } from './game/ui/theme'
+import { RACER_COLORS, TEXT_COLORS } from './game/ui/theme'
 
 /**
- * `README.md`, `AGENTS.md`, `package.json`, `ci.yml`, `.env.example`, the
- * `Dockerfile` and the nginx config describe the same project to different
+ * `README.md`, `AGENTS.md`, `package.json`, `ci.yml`, `.env.example`,
+ * `index.html`, the `Dockerfile` and the nginx config describe the same project to different
  * audiences, and nothing else in the suite reads any of them. Three
  * disagreements between them had to be corrected by hand once already; these
  * assertions turn the next one into a
@@ -920,5 +921,116 @@ describe('every RPC the client calls is one the schema offers', () => {
     const refused = rpcCalls.map((call) => call.name).filter((name) => !granted.includes(name))
 
     expect(refused, `RPCs the client calls without a grant: ${refused.join(', ')}`).toEqual([])
+  })
+})
+
+/**
+ * `index.html` is the one file every player loads and the one nothing else in the
+ * suite reads. It names the element the game mounts on, the module that boots it,
+ * and the colour the browser paints its chrome — each of which is repeated in the
+ * source, and none of which `tsc` can see across the HTML boundary. A renamed
+ * mount throws at boot, a moved entry builds a page with no game on it, and a
+ * re-inked theme leaves a strip of the old colour around the canvas.
+ */
+describe('the page shell stays in step with the game it boots', () => {
+  const sourceOf = (path: string): string => {
+    const text = sourceText[path]
+    if (text === undefined) {
+      throw new Error(`${path} is no longer where this test expects it`)
+    }
+    return text
+  }
+
+  it('mounts the game on the element the page provides', () => {
+    const provided = soleMatch('the index.html mount element', /<div id="([\w-]+)"/, pageShell)
+    const queried = soleMatch(
+      'the main.ts mount selector',
+      /querySelector<\w+>\('#([\w-]+)'\)/,
+      sourceOf('src/main.ts'),
+    )
+
+    expect(
+      queried,
+      `main.ts mounts the game on #${queried} but index.html provides #${provided}`,
+    ).toBe(provided)
+  })
+
+  it('loads an entry module that exists', () => {
+    const entry = soleMatch(
+      'the index.html entry script',
+      /<script type="module" src="\/([^"]+)"/,
+      pageShell,
+    )
+
+    expect(sourceFiles.has(entry), `index.html loads /${entry}, which is not in the tree`).toBe(true)
+  })
+
+  it('paints the browser chrome and the canvas in the theme ink', () => {
+    const chrome = soleMatch(
+      'the index.html theme-color',
+      /<meta name="theme-color" content="(#[0-9a-fA-F]{6})"/,
+      pageShell,
+    )
+    const canvas = soleMatch(
+      'the startGame.ts backgroundColor',
+      /backgroundColor: '(#[0-9a-fA-F]{6})'/,
+      sourceOf('src/game/startGame.ts'),
+    )
+
+    expect(
+      chrome.toLowerCase(),
+      `index.html paints the browser chrome ${chrome} but the theme ink is ${TEXT_COLORS.ink}`,
+    ).toBe(TEXT_COLORS.ink)
+    expect(
+      canvas.toLowerCase(),
+      `startGame.ts clears the canvas to ${canvas} but the theme ink is ${TEXT_COLORS.ink}`,
+    ).toBe(TEXT_COLORS.ink)
+  })
+})
+
+/**
+ * The gate is named in three places besides the workflow that runs it: the README
+ * tells a contributor what CI runs, `AGENTS.md` tells an agent which commands
+ * decide whether a change may land, and the Dockerfile runs the build half of it
+ * so that a tree failing the gate cannot produce an image. A step dropped from
+ * `ci.yml` would leave all three describing a check nobody performs.
+ */
+describe('the gate the guides describe is the gate CI and the image run', () => {
+  const ciSteps = [...ciWorkflow.matchAll(/^\s*- run: (.+)$/gm)].map((step) => step[1].trim())
+
+  it('runs exactly the steps the README says CI runs, in order', () => {
+    const sentence = soleMatch(
+      'the README CI sentence',
+      /Every push to `main` and every pull request runs ([^\n]*?) on Node/,
+      readme,
+    )
+    const documented = [...sentence.matchAll(/`([^`]+)`/g)].map((command) => command[1])
+
+    expect(
+      ciSteps,
+      `ci.yml runs ${ciSteps.join(', ')} but the README says ${documented.join(', ')}`,
+    ).toEqual(documented)
+  })
+
+  it('runs every command AGENTS.md names as the correctness gate', () => {
+    const gate = /\*\*`(npm run [\w:-]+)` and `(npm run [\w:-]+)` are the correctness gate\.\*\*/
+      .exec(agentsGuide)
+    if (gate === null) {
+      throw new Error('the AGENTS.md gate sentence could not be read — the format it is parsed from has changed')
+    }
+    const skipped = gate.slice(1).filter((command) => !ciSteps.includes(command))
+
+    expect(skipped, `AGENTS.md gate commands ci.yml never runs: ${skipped.join(', ')}`).toEqual([])
+  })
+
+  // AGENTS.md: the build stage needs `tsc` and `vite`, which are devDependencies,
+  // so `npm ci --omit=dev` there breaks the image rather than slimming it.
+  it('builds the image with the full install and the gate build', () => {
+    const steps = [...dockerfile.matchAll(/^RUN (npm [^\n]+)$/gm)].map((step) => step[1].trim())
+
+    expect(steps, `the Dockerfile build stage runs ${steps.join(', ')}`).toEqual([
+      'npm ci',
+      'npm run build',
+    ])
   })
 })
