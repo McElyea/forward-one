@@ -14,6 +14,7 @@ import {
   isRoomCode,
   MAX_ROOM_CAPACITY,
   MIN_ROOM_CAPACITY,
+  ROOM_CAPACITY_OPTIONS,
   sanitizePlayerName,
 } from './game/multiplayer/roomPolicy'
 import { parseRaceRoom } from './game/multiplayer/roomProtocol'
@@ -183,6 +184,9 @@ const NUMBER_WORDS: Record<string, number> = {
   three: 3,
   four: 4,
   five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
 }
 
 const spelledNumber = (label: string, pattern: RegExp): number => {
@@ -849,6 +853,72 @@ describe('the multiplayer schema stays in step with the rules the client applies
       heartbeatMs * 2,
       'one lost heartbeat is enough for the schema to evict a paddler or replace a host',
     ).toBeLessThanOrEqual(Math.min(...staleAfterSeconds) * 1_000)
+  })
+})
+
+/**
+ * The README quotes three multiplayer numbers a host plans around — how big a
+ * room starts and how far it grows, how many racers the rail keeps, and how long
+ * a room lives — and each is decided somewhere the README never reads: the menu's
+ * capacity options, a constant in `RiverScene`, and a column default in the
+ * schema.
+ */
+describe('the README stays in step with the multiplayer numbers it quotes', () => {
+  it('offers the room sizes the menu offers, starting from the default', () => {
+    const sentence = /online rooms start at (\w+) seats and can be expanded to ([^;.]+)/.exec(
+      readme,
+    )
+    if (sentence === null) {
+      throw new Error('the README room-size sentence could not be read — its format has changed')
+    }
+    const startsAt = NUMBER_WORDS[sentence[1].toLowerCase()]
+    if (startsAt === undefined) {
+      throw new Error(
+        `the README room size reads "${sentence[1]}", which is not a number this test knows`,
+      )
+    }
+    const expandsTo = sentence[2]
+      .split(/,|\bor\b/)
+      .map((size) => size.trim())
+      .filter((size) => size !== '')
+      .map(Number)
+
+    expect(startsAt, 'the README and roomPolicy.ts start a room at different sizes').toBe(
+      DEFAULT_ROOM_CAPACITY,
+    )
+    expect(
+      [startsAt, ...expandsTo],
+      'the README and ROOM_CAPACITY_OPTIONS offer different room sizes',
+    ).toEqual([...ROOM_CAPACITY_OPTIONS])
+  })
+
+  it('keeps as many racers on the rail as the river scene draws', () => {
+    const documented = spelledNumber(
+      'the README rail sentence',
+      /the in-race rail shows at most (\w+) useful positions/,
+    )
+
+    expect(
+      documented,
+      'the README and MAX_VISIBLE_RAIL_RACERS disagree on how crowded the rail gets',
+    ).toBe(sourceConstant('src/game/scenes/RiverScene.ts', 'MAX_VISIBLE_RAIL_RACERS'))
+  })
+
+  it('expires rooms when the schema does', () => {
+    const documented = spelledNumber(
+      'the README room-expiry sentence',
+      /race rooms themselves expire after (\w+) hours/,
+    )
+    const lifetimes = schemaCaptures(
+      'the room lifetime',
+      /expires_at timestamptz (?:not null )?default now\(\) \+ interval '(\d+) hours'/g,
+    )
+
+    for (const [hours] of lifetimes) {
+      expect(hours, 'the README and the schema give a room different lifetimes').toBe(
+        String(documented),
+      )
+    }
   })
 })
 
