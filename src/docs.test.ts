@@ -8,6 +8,7 @@ import nginxConfig from '../docker/nginx.conf?raw'
 import manifestSource from '../package.json?raw'
 import readme from '../README.md?raw'
 import tsconfigSource from '../tsconfig.json?raw'
+import pageStyle from './style.css?raw'
 import { MIN_RACE_PADDLERS } from './game/multiplayer/lobbyState'
 import {
   DEFAULT_ROOM_CAPACITY,
@@ -18,11 +19,12 @@ import {
   sanitizePlayerName,
 } from './game/multiplayer/roomPolicy'
 import { parseRaceRoom } from './game/multiplayer/roomProtocol'
-import { RACER_COLORS, TEXT_COLORS } from './game/ui/theme'
+import { REQUIRED_FONTS } from './game/ui/fontLoading'
+import { FONT_BODY, FONT_HEADING, RACER_COLORS, TEXT_COLORS } from './game/ui/theme'
 
 /**
  * `README.md`, `AGENTS.md`, `package.json`, `ci.yml`, `.env.example`,
- * `index.html`, the `Dockerfile` and the nginx config describe the same project to different
+ * `index.html`, `style.css`, the `Dockerfile` and the nginx config describe the same project to different
  * audiences, and nothing else in the suite reads any of them. Three
  * disagreements between them had to be corrected by hand once already; these
  * assertions turn the next one into a
@@ -1102,5 +1104,102 @@ describe('the gate the guides describe is the gate CI and the image run', () => 
       'npm ci',
       'npm run build',
     ])
+  })
+})
+
+/**
+ * `src/style.css` repeats what the TypeScript side decides — the page ink and
+ * cream, the font faces `main.ts` waits on before booting, and the custom
+ * properties the lobby's DOM inputs are styled through — across a boundary `tsc`
+ * cannot see. A face missing for a weight `REQUIRED_FONTS` asks for does not fail
+ * anywhere: `waitForFonts` times out and every Text object rasterizes in the
+ * fallback for the rest of the scene.
+ */
+describe('the stylesheet stays in step with the game it dresses', () => {
+  interface DeclaredFace {
+    family: string
+    /** The single weight, or the low and high ends of a variable range. */
+    weights: number[]
+    src: string
+  }
+
+  const fontFaces: DeclaredFace[] = [...pageStyle.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((face) => ({
+    family: soleMatch('an @font-face family', /font-family:\s*'([^']+)'/, face[1]),
+    weights: soleMatch('an @font-face weight', /font-weight:\s*(\d+(?:\s+\d+)?);/, face[1])
+      .split(/\s+/)
+      .map(Number),
+    src: soleMatch('an @font-face source', /src:\s*url\('([^']+)'\)/, face[1]),
+  }))
+
+  const declares = (family: string, weight: number): boolean =>
+    fontFaces.some((face) =>
+      face.family === family &&
+      weight >= face.weights[0] &&
+      weight <= face.weights[face.weights.length - 1])
+
+  // Lazy, so the keys say which files ship without any of them being loaded.
+  const shippedFonts = new Set(Object.keys(import.meta.glob('./assets/fonts/*.woff2')))
+
+  it('can still read the stylesheet and its font faces', () => {
+    expect(pageStyle.length, 'src/style.css imported as an empty string').toBeGreaterThan(0)
+    expect(fontFaces.length, 'no @font-face could be found in src/style.css').toBeGreaterThan(0)
+    expect(shippedFonts.size, 'no .woff2 could be found under src/assets/fonts').toBeGreaterThan(0)
+  })
+
+  it('declares a face for every font the boot waits on', () => {
+    const undeclared = REQUIRED_FONTS.filter((font) => {
+      const wanted = /^(\d+) \d+px "?([^"]+?)"?$/.exec(font)
+      if (wanted === null) {
+        throw new Error(`REQUIRED_FONTS entry ${font} could not be read — the format it is parsed from has changed`)
+      }
+      return !declares(wanted[2], Number(wanted[1]))
+    })
+
+    expect(undeclared, `REQUIRED_FONTS entries no @font-face in style.css declares: ${undeclared.join(', ')}`)
+      .toEqual([])
+  })
+
+  it('declares the family each theme font stack asks for first', () => {
+    const families = [FONT_HEADING, FONT_BODY].map((stack) => stack.split(',')[0].trim().replace(/"/g, ''))
+    const undeclared = families.filter((family) => !fontFaces.some((face) => face.family === family))
+
+    expect(undeclared, `theme.ts font families style.css never declares: ${undeclared.join(', ')}`).toEqual([])
+  })
+
+  it('points every face at a font file that ships', () => {
+    const missing = fontFaces.map((face) => face.src).filter((src) => !shippedFonts.has(src))
+
+    expect(missing, `@font-face sources with no file under src/assets/fonts: ${missing.join(', ')}`).toEqual([])
+  })
+
+  it('paints the page behind the canvas in the theme ink and cream', () => {
+    const root = soleMatch('the style.css :root block', /:root\s*\{([^}]*)\}/, pageStyle)
+    const ink = soleMatch('the :root background', /\bbackground:\s*(#[0-9a-fA-F]{6})/, root)
+    const cream = soleMatch('the :root color', /\bcolor:\s*(#[0-9a-fA-F]{6})/, root)
+    const body = soleMatch(
+      'the body background fallback',
+      /(?:^|\n)body\s*\{[^}]*?background:[^;]*?(#[0-9a-fA-F]{6});/,
+      pageStyle,
+    )
+
+    expect(ink.toLowerCase(), `style.css :root background is ${ink} but the theme ink is ${TEXT_COLORS.ink}`)
+      .toBe(TEXT_COLORS.ink)
+    expect(body.toLowerCase(), `style.css body background is ${body} but the theme ink is ${TEXT_COLORS.ink}`)
+      .toBe(TEXT_COLORS.ink)
+    expect(cream.toLowerCase(), `style.css :root color is ${cream} but the theme cream is ${TEXT_COLORS.cream}`)
+      .toBe(TEXT_COLORS.cream)
+  })
+
+  it('reads exactly the custom properties the source sets', () => {
+    const read = [...new Set([...pageStyle.matchAll(/var\((--[\w-]+)\)/g)].map((use) => use[1]))].sort()
+    const set = [
+      ...new Set(
+        Object.values(sourceText).flatMap((text) =>
+          [...text.matchAll(/setProperty\('(--[\w-]+)'/g)].map((call) => call[1])),
+      ),
+    ].sort()
+
+    expect(read.length, 'no var(--…) read could be found in src/style.css').toBeGreaterThan(0)
+    expect(read, `style.css reads ${read.join(', ')} but the source sets ${set.join(', ')}`).toEqual(set)
   })
 })
