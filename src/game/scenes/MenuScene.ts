@@ -9,7 +9,7 @@ import {
 } from '../audio/guideAudio'
 import { LEVELS } from '../levels'
 import { isMultiplayerConfigured } from '../multiplayer/multiplayerConfig'
-import { isRoomCode, normalizeRoomCode } from '../multiplayer/roomPolicy'
+import { invitedRoomCode } from '../multiplayer/roomLink'
 import type { LevelConfig } from '../types'
 import { descriptionLineSpacing, levelCardText, menuLayout, type MenuLayout } from '../ui/layout'
 import { LevelSelection } from '../ui/levelSelection'
@@ -73,10 +73,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
-    const invitedCode = normalizeRoomCode(
-      new URL(window.location.href).searchParams.get('room') ?? '',
-    )
-    if (isMultiplayerConfigured() && isRoomCode(invitedCode)) {
+    if (isMultiplayerConfigured() && invitedRoomCode(window.location.href)) {
       this.scene.start('lobby', { levelId: this.levelSelection.selected.id })
       return
     }

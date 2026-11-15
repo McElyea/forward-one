@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { getLevel } from '../levels'
 import { lobbyRoster, rosterLineLimit } from '../multiplayer/lobbyRoster'
 import { getPlayerName, savePlayerName } from '../multiplayer/playerIdentity'
+import { invitedRoomCode, joinedRoomHref, withoutRoomCode, withRoomCode } from '../multiplayer/roomLink'
 import {
   DEFAULT_ROOM_CAPACITY,
   isRoomCode,
@@ -92,10 +93,8 @@ export class LobbyScene extends Phaser.Scene {
     this.renderCapacity()
     this.renderView()
 
-    const invitedCode = normalizeRoomCode(
-      new URL(window.location.href).searchParams.get('room') ?? '',
-    )
-    if (this.codeInput && isRoomCode(invitedCode)) this.codeInput.value = invitedCode
+    const invitedCode = invitedRoomCode(window.location.href)
+    if (this.codeInput && invitedCode) this.codeInput.value = invitedCode
 
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanUp, this)
@@ -477,10 +476,7 @@ export class LobbyScene extends Phaser.Scene {
       this.statusText.setText('')
       this.stopLobbyListener = connection.onLobbyChange((snapshot) => this.renderLobby(snapshot))
       this.stopStartListener = connection.onStart(() => this.enterRace())
-      const roomUrl = new URL(window.location.href)
-      if (connection.room.matchmaking) roomUrl.searchParams.delete('room')
-      else roomUrl.searchParams.set('room', connection.room.code)
-      window.history.replaceState({}, '', roomUrl)
+      window.history.replaceState({}, '', joinedRoomHref(window.location.href, connection.room))
       this.renderView()
     } catch (error) {
       this.showStatus(messageFrom(error).toUpperCase())
@@ -523,9 +519,7 @@ export class LobbyScene extends Phaser.Scene {
     this.stopLobbyListener = undefined
     this.stopStartListener = undefined
     this.connection = undefined
-    const url = new URL(window.location.href)
-    url.searchParams.delete('room')
-    window.history.replaceState({}, '', url)
+    window.history.replaceState({}, '', withoutRoomCode(window.location.href))
     this.scene.start('river', {
       levelId: connection.room.levelId,
       mode: 'multiplayer',
@@ -535,10 +529,9 @@ export class LobbyScene extends Phaser.Scene {
 
   private async copyInvite(): Promise<void> {
     if (!this.connection) return
-    const invite = new URL(window.location.href)
-    invite.searchParams.set('room', this.connection.room.code)
+    const invite = withRoomCode(window.location.href, this.connection.room.code)
     try {
-      await navigator.clipboard.writeText(invite.toString())
+      await navigator.clipboard.writeText(invite)
       this.roomSubheading.setText(`INVITE COPIED  /  ${this.connection.room.code}`)
     } catch {
       this.roomSubheading.setText(`SHARE CODE ${this.connection.room.code}`)
@@ -565,9 +558,7 @@ export class LobbyScene extends Phaser.Scene {
       // put-in screen is already arriving. Say so rather than drop it silently.
       console.warn(LEAVE_FAILED_WARNING, error)
     } finally {
-      const url = new URL(window.location.href)
-      url.searchParams.delete('room')
-      window.history.replaceState({}, '', url)
+      window.history.replaceState({}, '', withoutRoomCode(window.location.href))
       this.scene.start('menu', { levelId: this.levelId })
     }
   }
