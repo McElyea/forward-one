@@ -87,6 +87,7 @@ src/game/
   multiplayer/SupabaseRoomConnection.ts
   multiplayer/roomPolicy.ts room capacities, room codes, and paddler names
   multiplayer/roomProtocol.ts parses room payloads and schedules the shared start
+  multiplayer/roomLink.ts   reads and writes the room code an invite link carries
   multiplayer/rpcResult.ts  turns a supabase-js error result into a thrown error
   multiplayer/playerIdentity.ts the paddler name kept in this browser
   multiplayer/lobbyState.ts who is in the room and when a race may start
