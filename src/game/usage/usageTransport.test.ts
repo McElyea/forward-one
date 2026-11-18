@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UsageEvent } from './usageEvents'
 import { deliverUsageEvent, markVisited, type VisitStorage } from './usageTransport'
 
@@ -166,5 +166,228 @@ describe('markVisited', () => {
   it('reaches for the browser\'s storage by default, surviving its absence', () => {
     // The node suite has no `window`, so this is the same path as a refused one.
     expect(markVisited()).toBe(false)
+  })
+})
+
+/**
+ * The browser the module reads when nothing is injected: where the page is,
+ * what the visitor asked for, and every listener and request it was handed.
+ */
+interface PageSetup {
+  hostname?: string
+  doNotTrack?: string | null
+  globalPrivacyControl?: boolean
+  dev?: boolean
+  withFetch?: boolean
+}
+
+const stubBrowser = ({
+  hostname = 'fwdone.com',
+  doNotTrack = null,
+  globalPrivacyControl,
+  dev = false,
+  withFetch = true,
+}: PageSetup = {}) => {
+  const listeners: { type: string; listener: (event: unknown) => void }[] = []
+  const fetched: { url: string; init: RequestInit }[] = []
+  const beacons: { url: string; data: Blob; owner: unknown }[] = []
+  const location = { hostname, href: `https://${hostname}/?level=1` }
+  const nav = {
+    userAgent: 'Firefox',
+    doNotTrack,
+    globalPrivacyControl,
+    sendBeacon(this: unknown, url: string, data: Blob) {
+      beacons.push({ url, data, owner: this })
+      return true
+    },
+  }
+
+  vi.stubEnv('DEV', dev)
+  vi.stubGlobal('window', {
+    location,
+    addEventListener: (type: string, listener: (event: unknown) => void) => {
+      listeners.push({ type, listener })
+    },
+  })
+  vi.stubGlobal('navigator', nav)
+  vi.stubGlobal(
+    'fetch',
+    withFetch
+      ? (url: string, init: RequestInit) => {
+        fetched.push({ url, init })
+        return Promise.resolve()
+      }
+      : undefined,
+  )
+
+  return { listeners, fetched, beacons, location, nav }
+}
+
+/** A fresh copy of the module, so its once-per-page decision never leaks between tests. */
+const loadTransport = () => import('./usageTransport')
+
+describe('sendUsageEvent', () => {
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+  })
+
+  it('posts the event through the browser\'s fetch from a deployed page', async () => {
+    const { fetched } = stubBrowser()
+    const { sendUsageEvent } = await loadTransport()
+
+    sendUsageEvent(event)
+
+    expect(fetched).toEqual([{
+      url: '/api/river-log',
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(event),
+        keepalive: true,
+      },
+    }])
+  })
+
+  it('sends nothing from a dev server', async () => {
+    const { fetched } = stubBrowser({ dev: true })
+    const { sendUsageEvent } = await loadTransport()
+
+    sendUsageEvent(event)
+
+    expect(fetched).toEqual([])
+  })
+
+  it('sends nothing from a local host', async () => {
+    const { fetched } = stubBrowser({ hostname: 'localhost' })
+    const { sendUsageEvent } = await loadTransport()
+
+    sendUsageEvent(event)
+
+    expect(fetched).toEqual([])
+  })
+
+  it('reads Do Not Track from the navigator', async () => {
+    const { fetched } = stubBrowser({ doNotTrack: '1' })
+    const { sendUsageEvent } = await loadTransport()
+
+    sendUsageEvent(event)
+
+    expect(fetched).toEqual([])
+  })
+
+  it('reads Global Privacy Control from the navigator', async () => {
+    const { fetched } = stubBrowser({ globalPrivacyControl: true })
+    const { sendUsageEvent } = await loadTransport()
+
+    sendUsageEvent(event)
+
+    expect(fetched).toEqual([])
+  })
+
+  it('decides once per page, ignoring a later change of mind', async () => {
+    const page = stubBrowser()
+    const { sendUsageEvent } = await loadTransport()
+    sendUsageEvent(event)
+
+    page.nav.doNotTrack = '1'
+    sendUsageEvent(event)
+
+    expect(page.fetched, 'the first answer is cached').toHaveLength(2)
+  })
+
+  it('keeps a refusal for the rest of the page', async () => {
+    const page = stubBrowser({ doNotTrack: '1' })
+    const { sendUsageEvent } = await loadTransport()
+    sendUsageEvent(event)
+
+    page.nav.doNotTrack = null
+    sendUsageEvent(event)
+
+    expect(page.fetched).toEqual([])
+  })
+
+  it('falls back to the navigator\'s own beacon in a browser with no fetch', async () => {
+    const { beacons, nav } = stubBrowser({ withFetch: false })
+    const { sendUsageEvent } = await loadTransport()
+
+    sendUsageEvent(event)
+
+    expect(beacons.map((beacon) => beacon.url)).toEqual(['/api/river-log'])
+    expect(await beacons[0].data.text()).toBe(JSON.stringify(event))
+    expect(beacons[0].owner, 'called on the navigator, not detached from it').toBe(nav)
+  })
+})
+
+describe('installErrorReporting', () => {
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+  })
+
+  it('listens for uncaught errors and unhandled rejections on a deployed page', async () => {
+    const { listeners } = stubBrowser()
+    const { installErrorReporting } = await loadTransport()
+
+    installErrorReporting()
+
+    expect(listeners.map((entry) => entry.type)).toEqual(['error', 'unhandledrejection'])
+  })
+
+  it('installs nothing where reporting is off', async () => {
+    const { listeners } = stubBrowser({ doNotTrack: 'yes' })
+    const { installErrorReporting } = await loadTransport()
+
+    installErrorReporting()
+
+    expect(listeners).toEqual([])
+  })
+
+  it('reports an uncaught error with where it was thrown and the page it happened on', async () => {
+    const { listeners, fetched } = stubBrowser()
+    const { installErrorReporting } = await loadTransport()
+    installErrorReporting()
+
+    listeners[0].listener({
+      error: undefined,
+      message: 'Script error.',
+      filename: 'https://fwdone.com/assets/index.js',
+      lineno: 3,
+      colno: 17,
+    })
+
+    expect(fetched.map((request) => JSON.parse(String(request.init.body)))).toEqual([{
+      type: 'error',
+      message: 'Script error.',
+      source: 'https://fwdone.com/assets/index.js:3:17',
+      stack: '',
+      userAgent: 'Firefox',
+      url: 'https://fwdone.com/?level=1',
+    }])
+  })
+
+  it('reports an unhandled rejection by its reason', async () => {
+    const { listeners, fetched } = stubBrowser()
+    const { installErrorReporting } = await loadTransport()
+    installErrorReporting()
+
+    listeners[1].listener({ reason: 'room closed' })
+
+    expect(fetched.map((request) => JSON.parse(String(request.init.body)))).toEqual([{
+      type: 'error',
+      message: 'Unhandled rejection — room closed',
+      source: '',
+      stack: '',
+      userAgent: 'Firefox',
+      url: 'https://fwdone.com/?level=1',
+    }])
   })
 })
