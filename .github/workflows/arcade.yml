@@ -1,0 +1,42 @@
+name: Arcade
+
+# Publishes the built game to the arcade at
+# https://forward-one.play.danielstephenson.dev, a static host for browser
+# games. It is off until the repository variable ARCADE_ENABLED is "true" (and
+# the ARCADE_TOKEN secret holds the upload token); "Run workflow" deploys by
+# hand either way. fwdone.com is deployed separately and is not affected.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || vars.ARCADE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test
+      # Online races need the two public Supabase values at build time, as on
+      # fwdone.com; left unset, the arcade copy offers solo and the simulated
+      # three-rival race.
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      - name: Name the version
+        run: echo "$(node -p "require('./package.json').version")+g${GITHUB_SHA::7}" > "$RUNNER_TEMP/arcade-version.txt"
+      - uses: Stephenson-Software/arcade-deploy@v1
+        with:
+          slug: forward-one
+          token: ${{ secrets.ARCADE_TOKEN }}
+          site-dir: dist
+          version-file: ${{ runner.temp }}/arcade-version.txt
